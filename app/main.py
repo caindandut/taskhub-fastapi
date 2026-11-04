@@ -9,8 +9,11 @@ from app.api.v1.router import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # No shared resources need initialization or cleanup in session 01.
-    yield
+    app.state.tasks = {}
+    try:
+        yield
+    finally:
+        app.state.tasks.clear()
 
 
 app = FastAPI(title="TaskHub API", version="0.1.0", lifespan=lifespan)
