@@ -40,9 +40,7 @@ def test_list_tasks_with_query_parameters(client: TestClient) -> None:
     response = client.get("/api/v1/tasks", params={"q": "fastapi", "limit": 1})
 
     assert response.status_code == 200
-    assert response.json() == [
-        {"id": 2, "title": "Learn FastAPI", "description": None}
-    ]
+    assert response.json() == [{"id": 2, "title": "Learn FastAPI", "description": None}]
 
 
 def test_get_missing_task(client: TestClient) -> None:
