@@ -1,12 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 
-from app.core.dependencies import get_task_store
-from app.schemas.task import TaskCreate, TaskRead
+from app.core.constants import DATABASE_CONFLICT, TASK_NOT_FOUND
+from app.core.dependencies import get_task_service
+from app.models import Task
+from app.schemas.task import TaskCreate, TaskPage, TaskQuery, TaskRead, TaskUpdate
+from app.services.task import TaskService
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
-TaskStore = Annotated[dict[int, TaskRead], Depends(get_task_store)]
+TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
+TaskID = Annotated[int, Path(gt=0, description="Task ID")]
 
 
 @router.post(
@@ -14,50 +18,53 @@ TaskStore = Annotated[dict[int, TaskRead], Depends(get_task_store)]
     response_model=TaskRead,
     status_code=status.HTTP_201_CREATED,
     summary="Create a task",
-    response_description="Created task",
+    responses={
+        404: {"description": "Related resource not found"},
+        409: {"description": DATABASE_CONFLICT},
+    },
 )
-async def create_task(payload: TaskCreate, store: TaskStore) -> TaskRead:
-    """Create a practice task. Data is lost when the application restarts."""
-    task = TaskRead(id=max(store, default=0) + 1, **payload.model_dump())
-    store[task.id] = task
-    return task
+async def create_task(payload: TaskCreate, service: TaskServiceDep) -> Task:
+    return await service.create(payload)
 
 
-@router.get(
-    "",
-    response_model=list[TaskRead],
-    summary="List tasks",
-    response_description="Matching tasks",
-)
+@router.get("", response_model=TaskPage, summary="List tasks")
 async def list_tasks(
-    store: TaskStore,
-    q: Annotated[
-        str | None,
-        Query(min_length=1, max_length=200, description="Search in task titles"),
-    ] = None,
-    limit: Annotated[
-        int, Query(ge=1, le=100, description="Maximum number of tasks to return")
-    ] = 10,
-) -> list[TaskRead]:
-    """List practice tasks, optionally searching titles without case sensitivity."""
-    tasks = list(store.values())
-    if q is not None:
-        tasks = [task for task in tasks if q.casefold() in task.title.casefold()]
-    return tasks[:limit]
+    query: Annotated[TaskQuery, Query()], service: TaskServiceDep
+) -> TaskPage:
+    return await service.list(query)
 
 
 @router.get(
     "/{task_id}",
     response_model=TaskRead,
     summary="Get a task",
-    response_description="Requested task",
-    responses={404: {"description": "Task not found"}},
+    responses={404: {"description": TASK_NOT_FOUND}},
 )
-async def get_task(
-    task_id: Annotated[int, Path(gt=0, description="Task ID")], store: TaskStore
-) -> TaskRead:
-    """Get a practice task by its positive integer ID."""
-    task = store.get(task_id)
-    if task is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Task not found")
-    return task
+async def get_task(task_id: TaskID, service: TaskServiceDep) -> Task:
+    return await service.get(task_id)
+
+
+@router.patch(
+    "/{task_id}",
+    response_model=TaskRead,
+    summary="Update a task",
+    responses={
+        404: {"description": "Task or assignee not found"},
+        409: {"description": DATABASE_CONFLICT},
+    },
+)
+async def update_task(
+    task_id: TaskID, payload: TaskUpdate, service: TaskServiceDep
+) -> Task:
+    return await service.update(task_id, payload)
+
+
+@router.delete(
+    "/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a task",
+    responses={404: {"description": TASK_NOT_FOUND}},
+)
+async def delete_task(task_id: TaskID, service: TaskServiceDep) -> Response:
+    await service.delete(task_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

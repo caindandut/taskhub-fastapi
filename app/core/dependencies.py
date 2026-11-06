@@ -1,8 +1,20 @@
-from fastapi import Request
+from typing import Annotated
 
-from app.schemas.task import TaskRead
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import get_session
+from app.repositories.task import TaskRepository
+from app.services.task import TaskService
+
+SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 
 
-def get_task_store(request: Request) -> dict[int, TaskRead]:
-    """Return this application's in-memory practice data."""
-    return request.app.state.tasks
+def get_task_repository(session: SessionDep) -> TaskRepository:
+    return TaskRepository(session)
+
+
+def get_task_service(
+    repository: Annotated[TaskRepository, Depends(get_task_repository)],
+) -> TaskService:
+    return TaskService(repository)
