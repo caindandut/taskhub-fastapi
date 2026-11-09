@@ -20,13 +20,15 @@ class TaskService:
             raise NotFoundException(TASK_NOT_FOUND)
         return task
 
-    async def create(self, payload: TaskCreate) -> Task:
+    async def create(self, payload: TaskCreate, creator_id: int) -> Task:
         if not await self.repository.project_exists(payload.project_id):
             raise NotFoundException(PROJECT_NOT_FOUND)
-        if not await self.repository.user_exists(payload.created_by):
+        if not await self.repository.user_exists(creator_id):
             raise NotFoundException(CREATOR_NOT_FOUND)
         await self.check_assignee(payload.assignee_id)
-        return await self.repository.create(Task(**payload.model_dump()))
+        return await self.repository.create(
+            Task(**payload.model_dump(), created_by=creator_id)
+        )
 
     async def list(self, query: TaskQuery) -> TaskPage:
         tasks, total = await self.repository.search(**query.model_dump())

@@ -40,10 +40,32 @@ def test_reject_invalid_or_synchronous_database_url(url: str) -> None:
 def test_database_url_is_hidden_in_settings() -> None:
     settings = Settings(
         database_url="mysql+aiomysql://user:private-password@localhost/taskhub",
+        jwt_secret_key="private-jwt-secret-key-at-least-32-chars",
         _env_file=None,
     )
 
     assert "private-password" not in repr(settings)
+    assert "private-jwt-secret-key" not in repr(settings)
+
+
+def test_jwt_secret_key_is_required_and_validated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+    short_secret = "too-short-secret"
+    with pytest.raises(ValidationError) as error:
+        Settings(jwt_secret_key=short_secret, _env_file=None)
+    assert short_secret not in str(error.value)
+
+    with pytest.raises(ValidationError):
+        Settings(
+            jwt_secret_key="valid-secret-key-with-at-least-32-characters",
+            jwt_algorithm="NONE",
+            _env_file=None,
+        )
 
 
 def test_accept_url_encoded_password() -> None:

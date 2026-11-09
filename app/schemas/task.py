@@ -43,7 +43,6 @@ class TaskCreate(TaskBase):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     project_id: PositiveInt
-    created_by: PositiveInt
 
 
 class TaskUpdate(BaseSchema):

@@ -5,14 +5,20 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core.config import get_settings
+from app.core.security import hash_password
 from app.db.session import create_database_engine
 from app.models import Base, Project, User, Workspace
+
+TEST_JWT_SECRET = "test-secret-key-with-at-least-32-bytes!"
+TEST_USER_PASSWORD = "StrongPassword123!"
+TEST_PASSWORD_HASH = hash_password(TEST_USER_PASSWORD)
 
 
 @pytest.fixture(autouse=True)
 def test_database_url(monkeypatch: pytest.MonkeyPatch):
     get_settings.cache_clear()
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    monkeypatch.setenv("JWT_SECRET_KEY", TEST_JWT_SECRET)
     yield
     get_settings.cache_clear()
 
@@ -36,7 +42,7 @@ def database_url(
                     id=1,
                     email="owner@example.com",
                     full_name="Owner",
-                    hashed_password="already-hashed-test-password",
+                    hashed_password=TEST_PASSWORD_HASH,
                 )
                 project = Project(
                     id=1,
@@ -50,7 +56,7 @@ def database_url(
                             id=2,
                             email="member@example.com",
                             full_name="Member",
-                            hashed_password="already-hashed-test-password",
+                            hashed_password=TEST_PASSWORD_HASH,
                         ),
                     ]
                 )

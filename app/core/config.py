@@ -1,9 +1,15 @@
 from functools import lru_cache
 
-from pydantic import SecretStr, field_validator
+from pydantic import PositiveInt, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
+
+from app.core.constants import (
+    DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES,
+    JWT_ALGORITHM_HS256,
+    JWT_SECRET_MIN_LENGTH,
+)
 
 
 class Settings(BaseSettings):
@@ -15,6 +21,9 @@ class Settings(BaseSettings):
     )
 
     database_url: SecretStr
+    jwt_secret_key: SecretStr
+    jwt_algorithm: str = JWT_ALGORITHM_HS256
+    access_token_expire_minutes: PositiveInt = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
 
     @field_validator("database_url")
     @classmethod
@@ -31,6 +40,23 @@ class Settings(BaseSettings):
             )
         if not url.database:
             raise ValueError("DATABASE_URL must include a database name")
+        return value
+
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def validate_jwt_secret_key(cls, value: SecretStr) -> SecretStr:
+        secret = value.get_secret_value().strip()
+        if len(secret) < JWT_SECRET_MIN_LENGTH:
+            raise ValueError(
+                f"JWT_SECRET_KEY must be at least {JWT_SECRET_MIN_LENGTH} characters"
+            )
+        return SecretStr(secret)
+
+    @field_validator("jwt_algorithm")
+    @classmethod
+    def validate_jwt_algorithm(cls, value: str) -> str:
+        if value != JWT_ALGORITHM_HS256:
+            raise ValueError(f"JWT_ALGORITHM must be {JWT_ALGORITHM_HS256}")
         return value
 
 
