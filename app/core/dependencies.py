@@ -9,6 +9,7 @@ from app.core.constants import NOT_AUTHENTICATED
 from app.core.exceptions import AuthenticationException
 from app.db.session import get_session
 from app.models import User
+from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
 from app.services.auth import AuthService
@@ -27,11 +28,18 @@ def get_user_repository(session: SessionDep) -> UserRepository:
     return UserRepository(session)
 
 
+def get_refresh_token_repository(session: SessionDep) -> RefreshTokenRepository:
+    return RefreshTokenRepository(session)
+
+
 def get_auth_service(
-    repository: Annotated[UserRepository, Depends(get_user_repository)],
+    user_repository: Annotated[UserRepository, Depends(get_user_repository)],
+    token_repository: Annotated[
+        RefreshTokenRepository, Depends(get_refresh_token_repository)
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AuthService:
-    return AuthService(repository, settings)
+    return AuthService(user_repository, token_repository, settings)
 
 
 async def get_current_user(

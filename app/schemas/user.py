@@ -67,3 +67,16 @@ class UserRead(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+
+
+class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    full_name: UserFullName | None = None
+
+    @field_validator("full_name")
+    @classmethod
+    def reject_explicit_null(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("This field cannot be null")
+        return value

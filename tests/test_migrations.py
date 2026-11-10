@@ -44,6 +44,7 @@ def test_migration_upgrade_check_and_downgrade(tmp_path: Path) -> None:
             "labels",
             "task_labels",
             "comments",
+            "refresh_tokens",
         }
         connection.execute(
             "INSERT INTO users (email, full_name, hashed_password) VALUES (?, ?, ?)",
@@ -78,5 +79,6 @@ def test_migration_generates_mysql_sql_without_connecting() -> None:
     )
 
     assert "CREATE TABLE tasks" in sql
+    assert "CREATE TABLE refresh_tokens" in sql
     assert "FOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE" in sql
     assert "AUTO_INCREMENT" in sql

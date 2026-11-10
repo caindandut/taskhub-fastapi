@@ -7,6 +7,7 @@ from sqlalchemy.exc import ArgumentError
 
 from app.core.constants import (
     DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES,
+    DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS,
     JWT_ALGORITHM_HS256,
     JWT_SECRET_MIN_LENGTH,
 )
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr
     jwt_algorithm: str = JWT_ALGORITHM_HS256
     access_token_expire_minutes: PositiveInt = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
+    refresh_token_expire_days: PositiveInt = DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS
 
     @field_validator("database_url")
     @classmethod

@@ -9,6 +9,7 @@ from app.db.base import Base, CreatedAtMixin
 from app.models.enums import UserRole
 
 if TYPE_CHECKING:
+    from app.models.refresh_token import RefreshToken
     from app.models.workspace import Workspace, WorkspaceMember
 
 
@@ -30,5 +31,8 @@ class User(CreatedAtMixin, Base):
         back_populates="owner", lazy="raise", passive_deletes="all"
     )
     memberships: Mapped[list[WorkspaceMember]] = relationship(
+        back_populates="user", lazy="raise", passive_deletes="all"
+    )
+    refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         back_populates="user", lazy="raise", passive_deletes="all"
     )
