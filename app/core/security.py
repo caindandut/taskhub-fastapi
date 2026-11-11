@@ -14,6 +14,7 @@ from app.core.constants import (
     JWT_ALGORITHM_HS256,
 )
 from app.core.exceptions import AuthenticationException
+from app.models.enums import TokenType
 
 password_hash = PasswordHash.recommended()
 DUMMY_PASSWORD_HASH = password_hash.hash("taskhub-dummy-password-verification")
@@ -52,39 +53,11 @@ def create_access_token(
     )
     payload = {
         "sub": str(subject),
-        "type": "access",
+        "type": TokenType.ACCESS.value,
         "iat": now,
         "exp": expire,
     }
     return jwt.encode(payload, secret_key, algorithm=algorithm)
-
-
-def decode_access_token(
-    token: str,
-    secret_key: str,
-    algorithm: str = JWT_ALGORITHM_HS256,
-) -> int:
-    try:
-        payload = jwt.decode(
-            token,
-            secret_key,
-            algorithms=[algorithm],
-            options={"require": ["sub", "exp", "type"]},
-        )
-    except InvalidTokenError as error:
-        raise AuthenticationException(INVALID_TOKEN) from error
-
-    if payload.get("type") != "access":
-        raise AuthenticationException(INVALID_TOKEN)
-
-    subject = payload.get("sub")
-    if not isinstance(subject, str) or not subject.isdigit():
-        raise AuthenticationException(INVALID_TOKEN)
-
-    user_id = int(subject)
-    if user_id <= 0:
-        raise AuthenticationException(INVALID_TOKEN)
-    return user_id
 
 
 def create_refresh_token(
@@ -101,7 +74,7 @@ def create_refresh_token(
     )
     payload = {
         "sub": str(subject),
-        "type": "refresh",
+        "type": TokenType.REFRESH.value,
         "jti": secrets.token_hex(16),
         "iat": now,
         "exp": expire,
@@ -109,8 +82,9 @@ def create_refresh_token(
     return jwt.encode(payload, secret_key, algorithm=algorithm)
 
 
-def decode_refresh_token(
+def _decode_token(
     token: str,
+    expected_type: TokenType | str,
     secret_key: str,
     algorithm: str = JWT_ALGORITHM_HS256,
 ) -> int:
@@ -124,7 +98,7 @@ def decode_refresh_token(
     except InvalidTokenError as error:
         raise AuthenticationException(INVALID_TOKEN) from error
 
-    if payload.get("type") != "refresh":
+    if payload.get("type") != str(expected_type):
         raise AuthenticationException(INVALID_TOKEN)
 
     subject = payload.get("sub")
@@ -135,3 +109,29 @@ def decode_refresh_token(
     if user_id <= 0:
         raise AuthenticationException(INVALID_TOKEN)
     return user_id
+
+
+def decode_access_token(
+    token: str,
+    secret_key: str,
+    algorithm: str = JWT_ALGORITHM_HS256,
+) -> int:
+    return _decode_token(
+        token=token,
+        expected_type=TokenType.ACCESS,
+        secret_key=secret_key,
+        algorithm=algorithm,
+    )
+
+
+def decode_refresh_token(
+    token: str,
+    secret_key: str,
+    algorithm: str = JWT_ALGORITHM_HS256,
+) -> int:
+    return _decode_token(
+        token=token,
+        expected_type=TokenType.REFRESH,
+        secret_key=secret_key,
+        algorithm=algorithm,
+    )

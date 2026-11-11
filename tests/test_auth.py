@@ -158,17 +158,16 @@ def test_login_and_fetch_current_user(client: TestClient) -> None:
     assert "hashed_password" not in token_data
 
     headers = {"Authorization": f"Bearer {token_data['access_token']}"}
-    for path in ("/api/v1/auth/me", "/api/v1/users/me"):
-        me_response = client.get(path, headers=headers)
-        assert me_response.status_code == 200
-        profile = me_response.json()
-        assert profile["id"] == 1
-        assert profile["email"] == "owner@example.com"
-        assert profile["full_name"] == "Owner"
-        assert profile["role"] == "MEMBER"
-        assert profile["is_active"] is True
-        assert "password" not in profile
-        assert "hashed_password" not in profile
+    me_response = client.get("/api/v1/users/me", headers=headers)
+    assert me_response.status_code == 200
+    profile = me_response.json()
+    assert profile["id"] == 1
+    assert profile["email"] == "owner@example.com"
+    assert profile["full_name"] == "Owner"
+    assert profile["role"] == "MEMBER"
+    assert profile["is_active"] is True
+    assert "password" not in profile
+    assert "hashed_password" not in profile
 
 
 @pytest.mark.parametrize(
@@ -216,7 +215,7 @@ def test_inactive_user_cannot_login_or_access_protected_endpoints(
     assert login_response.json() == {"detail": INACTIVE_USER}
 
     headers = {"Authorization": f"Bearer {token}"}
-    for path in ("/api/v1/auth/me", "/api/v1/users/me", "/api/v1/tasks"):
+    for path in ("/api/v1/users/me", "/api/v1/tasks"):
         response = client.get(path, headers=headers)
         assert response.status_code == 401
         assert response.json() == {"detail": INACTIVE_USER}
@@ -225,7 +224,7 @@ def test_inactive_user_cannot_login_or_access_protected_endpoints(
 
 def test_missing_or_non_bearer_authorization_returns_401(client: TestClient) -> None:
     for headers in ({}, {"Authorization": "Basic dXNlcjpwYXNz"}):
-        response = client.get("/api/v1/auth/me", headers=headers)
+        response = client.get("/api/v1/users/me", headers=headers)
         assert response.status_code == 401
         assert response.json() == {"detail": NOT_AUTHENTICATED}
         assert response.headers.get("WWW-Authenticate") == "Bearer"
@@ -270,7 +269,7 @@ def test_invalid_or_expired_tokens_return_401(client: TestClient) -> None:
         deleted_user_token,
     ):
         response = client.get(
-            "/api/v1/auth/me",
+            "/api/v1/users/me",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 401
@@ -297,20 +296,27 @@ def test_refresh_token_rotation_and_revocation(client: TestClient) -> None:
 
     # New access token works
     me_res = client.get(
-        "/api/v1/auth/me",
+        "/api/v1/users/me",
         headers={"Authorization": f"Bearer {tokens_2['access_token']}"},
     )
     assert me_res.status_code == 200
     assert me_res.json()["email"] == "owner@example.com"
+
+    # New refresh token works
+    refresh_res_2 = client.post("/api/v1/auth/refresh", json={"refresh_token": ref_2})
+    assert refresh_res_2.status_code == 200
+    tokens_3 = refresh_res_2.json()
+    ref_3 = tokens_3["refresh_token"]
 
     # Old refresh token is revoked and cannot be used again
     reused_res = client.post("/api/v1/auth/refresh", json={"refresh_token": ref_1})
     assert reused_res.status_code == 401
     assert reused_res.json() == {"detail": INVALID_TOKEN}
 
-    # New refresh token works again
-    refresh_res_2 = client.post("/api/v1/auth/refresh", json={"refresh_token": ref_2})
-    assert refresh_res_2.status_code == 200
+    # Reuse detection: when revoked token is reused, all tokens for the user are revoked
+    reused_victim_token = client.post("/api/v1/auth/refresh", json={"refresh_token": ref_3})
+    assert reused_victim_token.status_code == 401
+    assert reused_victim_token.json() == {"detail": INVALID_TOKEN}
 
 
 def test_logout_revokes_refresh_token(client: TestClient) -> None:
@@ -444,11 +450,8 @@ def test_change_password_success_and_revocation(client: TestClient) -> None:
 
     # Change password
     new_password = "BrandNewPassword123!"
-    for path in ("/api/v1/auth/change-password", "/api/v1/users/me/change-password"):
-        pass
-
     change_res = client.post(
-        "/api/v1/auth/change-password",
+        "/api/v1/users/me/change-password",
         headers=headers,
         json={
             "current_password": TEST_USER_PASSWORD,
@@ -477,7 +480,7 @@ def test_change_password_success_and_revocation(client: TestClient) -> None:
     assert old_ref_res.status_code == 401
     assert old_ref_res.json() == {"detail": INVALID_TOKEN}
 
-    # Change password back via /users/me/change-password to verify both routes
+    # Change password back via /users/me/change-password
     new_headers = {"Authorization": f"Bearer {new_login.json()['access_token']}"}
     change_back = client.post(
         "/api/v1/users/me/change-password",
@@ -500,7 +503,7 @@ def test_change_password_validations(client: TestClient) -> None:
     # Unauthenticated
     assert (
         client.post(
-            "/api/v1/auth/change-password",
+            "/api/v1/users/me/change-password",
             json={
                 "current_password": TEST_USER_PASSWORD,
                 "new_password": "NewValidPassword123!",
@@ -511,7 +514,7 @@ def test_change_password_validations(client: TestClient) -> None:
 
     # Wrong current password
     wrong_curr = client.post(
-        "/api/v1/auth/change-password",
+        "/api/v1/users/me/change-password",
         headers=headers,
         json={
             "current_password": "WrongCurrentPassword123!",
@@ -524,7 +527,7 @@ def test_change_password_validations(client: TestClient) -> None:
     # Validation errors on new password
     for bad_new in ("short", "        ", ""):
         bad_res = client.post(
-            "/api/v1/auth/change-password",
+            "/api/v1/users/me/change-password",
             headers=headers,
             json={
                 "current_password": TEST_USER_PASSWORD,
@@ -535,7 +538,7 @@ def test_change_password_validations(client: TestClient) -> None:
 
     # Extra forbidden field
     extra_res = client.post(
-        "/api/v1/auth/change-password",
+        "/api/v1/users/me/change-password",
         headers=headers,
         json={
             "current_password": TEST_USER_PASSWORD,

@@ -1,10 +1,10 @@
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.constants import NOT_AUTHENTICATED
 from app.core.exceptions import AuthenticationException
 from app.db.session import get_session
@@ -17,11 +17,6 @@ from app.services.task import TaskService
 
 SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 bearer_scheme = HTTPBearer(auto_error=False)
-
-
-def get_settings(request: Request) -> Settings:
-    settings = getattr(request.app.state, "settings", None)
-    return settings if isinstance(settings, Settings) else Settings()
 
 
 def get_user_repository(session: SessionDep) -> UserRepository:

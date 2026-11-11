@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
+from starlette.concurrency import run_in_threadpool
+
 from app.core.config import Settings
 from app.core.constants import (
     EMAIL_ALREADY_REGISTERED,
@@ -41,10 +43,11 @@ class AuthService:
     async def register(self, payload: UserCreate) -> User:
         if await self.user_repository.get_by_email(payload.email) is not None:
             raise ConflictException(EMAIL_ALREADY_REGISTERED)
+        hashed_pw = await run_in_threadpool(hash_password, payload.password)
         user = User(
             email=payload.email,
             full_name=payload.full_name,
-            hashed_password=hash_password(payload.password),
+            hashed_password=hashed_pw,
             role=UserRole.MEMBER,
             is_active=True,
         )
@@ -81,9 +84,12 @@ class AuthService:
     async def login(self, payload: LoginRequest) -> TokenResponse:
         user = await self.user_repository.get_by_email(payload.email)
         if user is None:
-            verify_password_dummy(payload.password)
+            await run_in_threadpool(verify_password_dummy, payload.password)
             raise AuthenticationException(INVALID_CREDENTIALS)
-        if not verify_password(payload.password, user.hashed_password):
+        is_valid = await run_in_threadpool(
+            verify_password, payload.password, user.hashed_password
+        )
+        if not is_valid:
             raise AuthenticationException(INVALID_CREDENTIALS)
         if not user.is_active:
             raise AuthenticationException(INACTIVE_USER)
@@ -99,8 +105,15 @@ class AuthService:
         )
         token_hash = hash_token(refresh_token)
         token_record = await self.token_repository.get_by_token_hash(token_hash)
-        if token_record is None or token_record.revoked_at is not None:
+        if token_record is None:
             raise AuthenticationException(INVALID_TOKEN)
+
+        # Reuse detection: if token is already revoked, revoke all tokens for this user
+        if token_record.revoked_at is not None:
+            await self.token_repository.revoke_all_for_user(token_record.user_id)
+            await self.token_repository.session.commit()
+            raise AuthenticationException(INVALID_TOKEN)
+
         now = datetime.now(UTC).replace(tzinfo=None)
         if token_record.expires_at <= now:
             raise AuthenticationException(INVALID_TOKEN)
@@ -111,7 +124,14 @@ class AuthService:
         if not user.is_active:
             raise AuthenticationException(INACTIVE_USER)
 
-        await self.token_repository.update(token_record, {"revoked_at": now})
+        # Atomic rotate: update WHERE revoked_at IS NULL, check rowcount
+        revoked = await self.token_repository.revoke_active_by_hash(token_hash, now)
+        if not revoked:
+            # Race condition: another concurrent request already rotated this token
+            await self.token_repository.revoke_all_for_user(user.id)
+            await self.token_repository.session.commit()
+            raise AuthenticationException(INVALID_TOKEN)
+
         return await self._issue_tokens(user.id)
 
     async def logout(self, refresh_token: str) -> None:
@@ -123,11 +143,10 @@ class AuthService:
             algorithm=algorithm,
         )
         token_hash = hash_token(refresh_token)
-        token_record = await self.token_repository.get_by_token_hash(token_hash)
-        if token_record is None or token_record.revoked_at is not None:
-            raise AuthenticationException(INVALID_TOKEN)
         now = datetime.now(UTC).replace(tzinfo=None)
-        await self.token_repository.update(token_record, {"revoked_at": now})
+        revoked = await self.token_repository.revoke_active_by_hash(token_hash, now)
+        if not revoked:
+            raise AuthenticationException(INVALID_TOKEN)
 
     async def get_current_user(self, token: str) -> User:
         user_id = decode_access_token(
@@ -149,9 +168,14 @@ class AuthService:
         return await self.user_repository.update(user, values)
 
     async def change_password(self, user: User, payload: ChangePasswordRequest) -> None:
-        if not verify_password(payload.current_password, user.hashed_password):
+        is_valid = await run_in_threadpool(
+            verify_password, payload.current_password, user.hashed_password
+        )
+        if not is_valid:
             raise AuthenticationException(INCORRECT_CURRENT_PASSWORD)
-        new_hashed_password = hash_password(payload.new_password)
+        new_hashed_password = await run_in_threadpool(
+            hash_password, payload.new_password
+        )
         await self.user_repository.update(
             user, {"hashed_password": new_hashed_password}
         )

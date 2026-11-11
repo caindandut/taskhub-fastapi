@@ -6,12 +6,10 @@ from app.core.constants import (
     EMAIL_ALREADY_REGISTERED,
     INVALID_CREDENTIALS,
     INVALID_TOKEN,
-    NOT_AUTHENTICATED,
 )
-from app.core.dependencies import CurrentUserDep, get_auth_service
+from app.core.dependencies import get_auth_service
 from app.models import User
 from app.schemas.auth import (
-    ChangePasswordRequest,
     LoginRequest,
     RefreshTokenRequest,
     TokenResponse,
@@ -65,28 +63,3 @@ async def refresh(
 async def logout(payload: RefreshTokenRequest, service: AuthServiceDep) -> Response:
     await service.logout(payload.refresh_token)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post(
-    "/change-password",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Change password for current user",
-    responses={401: {"description": NOT_AUTHENTICATED}},
-)
-async def change_password(
-    payload: ChangePasswordRequest,
-    current_user: CurrentUserDep,
-    service: AuthServiceDep,
-) -> Response:
-    await service.change_password(current_user, payload)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.get(
-    "/me",
-    response_model=UserRead,
-    summary="Get current authenticated user",
-    responses={401: {"description": NOT_AUTHENTICATED}},
-)
-async def get_authenticated_user(current_user: CurrentUserDep) -> User:
-    return current_user
