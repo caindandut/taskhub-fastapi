@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, Path, Query, Response, status
 
 from app.core.constants import DATABASE_CONFLICT, TASK_NOT_FOUND
 from app.core.dependencies import get_task_service
-from app.models import Task
 from app.schemas.task import TaskCreate, TaskPage, TaskQuery, TaskRead, TaskUpdate
 from app.services.task import TaskService
 
@@ -23,8 +22,9 @@ TaskID = Annotated[int, Path(gt=0, description="Task ID")]
         409: {"description": DATABASE_CONFLICT},
     },
 )
-async def create_task(payload: TaskCreate, service: TaskServiceDep) -> Task:
-    return await service.create(payload)
+async def create_task(payload: TaskCreate, service: TaskServiceDep) -> TaskRead:
+    task = await service.create(payload)
+    return TaskRead.model_validate(task)
 
 
 @router.get("", response_model=TaskPage, summary="List tasks")
@@ -40,8 +40,9 @@ async def list_tasks(
     summary="Get a task",
     responses={404: {"description": TASK_NOT_FOUND}},
 )
-async def get_task(task_id: TaskID, service: TaskServiceDep) -> Task:
-    return await service.get(task_id)
+async def get_task(task_id: TaskID, service: TaskServiceDep) -> TaskRead:
+    task = await service.get(task_id)
+    return TaskRead.model_validate(task)
 
 
 @router.patch(
@@ -55,8 +56,9 @@ async def get_task(task_id: TaskID, service: TaskServiceDep) -> Task:
 )
 async def update_task(
     task_id: TaskID, payload: TaskUpdate, service: TaskServiceDep
-) -> Task:
-    return await service.update(task_id, payload)
+) -> TaskRead:
+    task = await service.update(task_id, payload)
+    return TaskRead.model_validate(task)
 
 
 @router.delete(

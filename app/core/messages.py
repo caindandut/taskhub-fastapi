@@ -1,0 +1,6 @@
+FIELD_CANNOT_BE_NULL = "This field cannot be null"
+TASK_NOT_FOUND = "Task not found"
+PROJECT_NOT_FOUND = "Project not found"
+CREATOR_NOT_FOUND = "Creator not found"
+ASSIGNEE_NOT_FOUND = "Assignee not found"
+DATABASE_CONFLICT = "Data conflicts with an existing record or a related resource"

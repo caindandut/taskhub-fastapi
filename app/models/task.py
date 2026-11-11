@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants import TASK_TITLE_MAX_LENGTH
 from app.db.base import Base, CreatedAtMixin
 from app.models.enums import TaskPriority, TaskStatus
 
@@ -39,7 +40,7 @@ class Task(CreatedAtMixin, Base):
     assignee_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
-    title: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(String(TASK_TITLE_MAX_LENGTH))
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[TaskStatus] = mapped_column(
         Enum(TaskStatus, native_enum=False, create_constraint=True, name="task_status"),

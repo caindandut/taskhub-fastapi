@@ -7,17 +7,16 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.api.v1.endpoints import health
 from app.api.v1.router import api_router
-from app.core.config import Settings
+from app.core.config import get_settings
 from app.core.constants import DATABASE_CONFLICT
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import AppException
 from app.db.session import create_database_engine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = Settings()
+    settings = get_settings()
     engine = create_database_engine(settings.database_url.get_secret_value())
     app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
@@ -31,10 +30,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="TaskHub API", version="0.1.0", lifespan=lifespan)
 
 
-@app.exception_handler(NotFoundException)
-async def not_found_handler(request: Request, error: NotFoundException) -> JSONResponse:
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, error: AppException) -> JSONResponse:
     return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(error)}
+        status_code=error.status_code,
+        content={"detail": error.message},
+        headers=error.headers,
     )
 
 
@@ -47,5 +48,4 @@ async def integrity_error_handler(
     )
 
 
-app.include_router(health.router)
 app.include_router(api_router, prefix="/api/v1")

@@ -262,7 +262,7 @@ def test_accept_length_boundaries_and_normalize_due_date(client: TestClient) -> 
     )
     assert len(task["title"]) == 200
     assert len(task["description"]) == 2000
-    assert task["due_date"] == "2026-12-01T05:00:00"
+    assert task["due_date"] == "2026-12-01T05:00:00Z"
 
 
 def test_repository_dependency_can_be_overridden(client: TestClient) -> None:

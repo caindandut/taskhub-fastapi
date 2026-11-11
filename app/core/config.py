@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
@@ -30,3 +32,8 @@ class Settings(BaseSettings):
         if not url.database:
             raise ValueError("DATABASE_URL must include a database name")
         return value
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

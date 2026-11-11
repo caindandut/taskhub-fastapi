@@ -4,13 +4,17 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.core.config import get_settings
 from app.db.session import create_database_engine
 from app.models import Base, Project, User, Workspace
 
 
 @pytest.fixture(autouse=True)
-def test_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_database_url(monkeypatch: pytest.MonkeyPatch):
+    get_settings.cache_clear()
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -19,6 +23,7 @@ def database_url(
 ) -> str:
     url = f"sqlite+aiosqlite:///{(tmp_path / 'taskhub.db').as_posix()}"
     monkeypatch.setenv("DATABASE_URL", url)
+    get_settings.cache_clear()
 
     async def prepare_database() -> None:
         engine = create_database_engine(url)
