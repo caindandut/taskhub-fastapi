@@ -1,13 +1,18 @@
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 
-@pytest.mark.parametrize("path", ["/health", "/api/v1/health"])
-def test_health_returns_ok(path: str) -> None:
+def test_health_returns_ok() -> None:
     with TestClient(app) as client:
-        response = client.get(path)
+        response = client.get("/api/v1/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_health_not_mounted_at_root() -> None:
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 404
