@@ -17,3 +17,17 @@ class AppException(Exception):
 class NotFoundException(AppException):
     def __init__(self, message: str = "Resource not found") -> None:
         super().__init__(message=message, status_code=status.HTTP_404_NOT_FOUND)
+
+
+class ConflictException(AppException):
+    def __init__(self, message: str = "Resource conflict") -> None:
+        super().__init__(message=message, status_code=status.HTTP_409_CONFLICT)
+
+
+class AuthenticationException(AppException):
+    def __init__(self, message: str = "Could not validate credentials") -> None:
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Bearer"},
+        )

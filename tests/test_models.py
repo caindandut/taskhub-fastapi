@@ -12,6 +12,7 @@ from app.models import (
     Comment,
     Label,
     Project,
+    RefreshToken,
     Task,
     User,
     Workspace,
@@ -125,3 +126,46 @@ def test_task_relationships_and_project_delete_cascade() -> None:
             await engine.dispose()
 
     asyncio.run(check_task_graph())
+
+
+def test_refresh_token_relationship_and_user_delete_cascade() -> None:
+    async def check_tokens() -> None:
+        from datetime import UTC, datetime, timedelta
+
+        engine = create_database_engine("sqlite+aiosqlite:///:memory:")
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+            async with factory.begin() as session:
+                user = User(
+                    email="tokenuser@example.com",
+                    full_name="Token User",
+                    hashed_password="already-hashed-password",
+                )
+                user.refresh_tokens.append(
+                    RefreshToken(
+                        token_hash="fakehash123",
+                        expires_at=datetime.now(UTC).replace(tzinfo=None)
+                        + timedelta(days=7),
+                    )
+                )
+                session.add(user)
+            async with factory() as session:
+                token = await session.scalar(
+                    select(RefreshToken).options(selectinload(RefreshToken.user))
+                )
+                assert token is not None
+                assert token.user.email == "tokenuser@example.com"
+                user_id = token.user_id
+            async with factory.begin() as session:
+                await session.execute(delete(User).where(User.id == user_id))
+            async with factory() as session:
+                assert (
+                    await session.scalar(select(func.count()).select_from(RefreshToken))
+                    == 0
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(check_tokens())

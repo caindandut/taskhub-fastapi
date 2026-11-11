@@ -9,22 +9,29 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core.constants import DATABASE_CONFLICT
 from app.core.dependencies import get_task_repository
+from app.core.security import create_access_token
 from app.db.session import create_database_engine
 from app.main import app
 from app.models import Project, Task
 from app.repositories.task import TaskRepository
+from tests.conftest import TEST_JWT_SECRET
+
+
+def auth_headers(user_id: int = 1) -> dict[str, str]:
+    token = create_access_token(subject=user_id, secret_key=TEST_JWT_SECRET)
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def client(database_url: str) -> Iterator[TestClient]:
-    with TestClient(app) as test_client:
+    with TestClient(app, headers=auth_headers(1)) as test_client:
         yield test_client
 
 
 def create_task(client: TestClient, title: str = "Learn FastAPI", **fields) -> dict:
     response = client.post(
         "/api/v1/tasks",
-        json={"title": title, "project_id": 1, "created_by": 1, **fields},
+        json={"title": title, "project_id": 1, **fields},
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -84,9 +91,9 @@ def test_list_defaults_to_ten_results(client: TestClient) -> None:
 
 
 def test_task_survives_application_restart(database_url: str) -> None:
-    with TestClient(app) as client:
+    with TestClient(app, headers=auth_headers(1)) as client:
         task = create_task(client)
-    with TestClient(app) as restarted_client:
+    with TestClient(app, headers=auth_headers(1)) as restarted_client:
         response = restarted_client.get(f"/api/v1/tasks/{task['id']}")
         assert response.status_code == 200
         assert response.json() == task
@@ -152,15 +159,13 @@ def test_missing_task_returns_consistent_404(client: TestClient, method: str) ->
     assert response.json() == {"detail": "Task not found"}
 
 
-@pytest.mark.parametrize(
-    "fields", [{"project_id": 999}, {"created_by": 999}, {"assignee_id": 999}]
-)
+@pytest.mark.parametrize("fields", [{"project_id": 999}, {"assignee_id": 999}])
 def test_create_rejects_missing_related_records(
     client: TestClient, fields: dict
 ) -> None:
     response = client.post(
         "/api/v1/tasks",
-        json={"title": "Task", "project_id": 1, "created_by": 1, **fields},
+        json={"title": "Task", "project_id": 1, **fields},
     )
     assert response.status_code == 404
     assert client.get("/api/v1/tasks").json()["total"] == 0
@@ -178,6 +183,7 @@ def test_create_rejects_missing_related_records(
         {"description": 123},
         {"id": 99},
         {"project_id": 0},
+        {"created_by": 1},
         {"created_by": 0},
         {"status": "INVALID"},
     ],
@@ -185,7 +191,7 @@ def test_create_rejects_missing_related_records(
 def test_reject_invalid_create_body(client: TestClient, fields: dict) -> None:
     response = client.post(
         "/api/v1/tasks",
-        json={"title": "Task", "project_id": 1, "created_by": 1, **fields},
+        json={"title": "Task", "project_id": 1, **fields},
     )
     assert response.status_code == 422
     assert client.get("/api/v1/tasks").json()["total"] == 0
@@ -323,10 +329,10 @@ def test_filter_tasks_by_project(client: TestClient, database_url: str) -> None:
 def test_foreign_key_conflict_is_safe_and_rolls_back(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(TaskRepository, "user_exists", AsyncMock(return_value=True))
+    monkeypatch.setattr(TaskRepository, "project_exists", AsyncMock(return_value=True))
     response = client.post(
         "/api/v1/tasks",
-        json={"title": "Invalid reference", "project_id": 1, "created_by": 999},
+        json={"title": "Invalid reference", "project_id": 999},
     )
     assert response.status_code == 409
     assert response.json() == {"detail": DATABASE_CONFLICT}
@@ -339,9 +345,38 @@ def test_invalid_response_is_not_returned_to_client(database_url: str) -> None:
     repository.get.return_value = {"id": 1, "description": "Missing title"}
     app.dependency_overrides[get_task_repository] = lambda: repository
     try:
-        with TestClient(app, raise_server_exceptions=False) as client:
+        with TestClient(
+            app, headers=auth_headers(1), raise_server_exceptions=False
+        ) as client:
             response = client.get("/api/v1/tasks/1")
         assert response.status_code == 500
         assert response.text == "Internal Server Error"
     finally:
         app.dependency_overrides.pop(get_task_repository)
+
+
+def test_task_creator_comes_from_authenticated_user(database_url: str) -> None:
+    with TestClient(app, headers=auth_headers(2)) as member_client:
+        task = create_task(member_client, "Member task")
+        assert task["created_by"] == 2
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("post", "/api/v1/tasks", {"title": "Task", "project_id": 1}),
+        ("get", "/api/v1/tasks", None),
+        ("get", "/api/v1/tasks/1", None),
+        ("patch", "/api/v1/tasks/1", {"title": "Updated"}),
+        ("delete", "/api/v1/tasks/1", None),
+    ],
+)
+def test_task_endpoints_require_authentication(
+    database_url: str, method: str, path: str, payload: dict | None
+) -> None:
+    with TestClient(app) as unauthenticated_client:
+        response = unauthenticated_client.request(
+            method, path, **({"json": payload} if payload is not None else {})
+        )
+    assert response.status_code == 401
+    assert response.headers.get("WWW-Authenticate") == "Bearer"
