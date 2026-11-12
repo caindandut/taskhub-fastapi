@@ -27,7 +27,9 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
         await self.session.execute(statement)
         await self.session.flush()
 
-    async def revoke_active_by_hash(self, token_hash: str, revoked_at: datetime) -> bool:
+    async def revoke_active_by_hash(
+        self, token_hash: str, revoked_at: datetime
+    ) -> bool:
         statement = (
             update(RefreshToken)
             .where(
