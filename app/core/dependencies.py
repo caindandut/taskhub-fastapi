@@ -9,11 +9,13 @@ from app.core.constants import NOT_AUTHENTICATED
 from app.core.exceptions import AuthenticationException
 from app.db.session import get_session
 from app.models import User
+from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.services.auth import AuthService
+from app.services.project import ProjectService
 from app.services.task import TaskService
 from app.services.workspace import WorkspaceService
 
@@ -73,3 +75,16 @@ def get_workspace_service(
     repository: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
 ) -> WorkspaceService:
     return WorkspaceService(repository)
+
+
+def get_project_repository(session: SessionDep) -> ProjectRepository:
+    return ProjectRepository(session)
+
+
+def get_project_service(
+    repository: Annotated[ProjectRepository, Depends(get_project_repository)],
+    workspace_repository: Annotated[
+        WorkspaceRepository, Depends(get_workspace_repository)
+    ],
+) -> ProjectService:
+    return ProjectService(repository, workspace_repository)
