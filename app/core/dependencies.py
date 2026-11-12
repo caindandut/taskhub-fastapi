@@ -12,8 +12,10 @@ from app.models import User
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
+from app.repositories.workspace import WorkspaceRepository
 from app.services.auth import AuthService
 from app.services.task import TaskService
+from app.services.workspace import WorkspaceService
 
 SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -61,3 +63,13 @@ def get_task_service(
     repository: Annotated[TaskRepository, Depends(get_task_repository)],
 ) -> TaskService:
     return TaskService(repository)
+
+
+def get_workspace_repository(session: SessionDep) -> WorkspaceRepository:
+    return WorkspaceRepository(session)
+
+
+def get_workspace_service(
+    repository: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+) -> WorkspaceService:
+    return WorkspaceService(repository)

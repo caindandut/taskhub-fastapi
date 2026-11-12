@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
+from pydantic import ConfigDict, Field, PositiveInt, field_validator
 
 from app.core.constants import (
     DEFAULT_PAGE_SIZE,
