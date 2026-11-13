@@ -45,6 +45,10 @@ class TaskCreate(TaskBase):
     project_id: PositiveInt
 
 
+class ProjectTaskCreate(TaskBase):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
 class TaskUpdate(BaseSchema):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -88,13 +92,19 @@ class TaskRead(TaskBase):
         return value
 
 
-class TaskQuery(BaseSchema):
+class ProjectTaskQuery(BaseSchema):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     q: TaskTitle | None = None
-    project_id: PositiveInt | None = None
+    status: TaskStatus | None = None
+    priority: TaskPriority | None = None
+    assignee_id: PositiveInt | None = None
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
+
+
+class TaskQuery(ProjectTaskQuery):
+    project_id: PositiveInt | None = None
 
 
 class TaskPage(BaseSchema):

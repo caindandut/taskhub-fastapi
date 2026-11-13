@@ -33,13 +33,7 @@ class ProjectService:
     ) -> WorkspaceRole | None:
         if user.role == UserRole.ADMIN:
             return WorkspaceRole.OWNER
-        role = await self.workspace_repository.get_member_role(workspace_id, user.id)
-        if role is not None:
-            return role
-        workspace = await self.workspace_repository.get(workspace_id)
-        if workspace is not None and workspace.owner_id == user.id:
-            return WorkspaceRole.OWNER
-        return None
+        return await self.workspace_repository.get_effective_role(workspace_id, user.id)
 
     async def create(
         self, workspace_id: int, payload: ProjectCreate, user: User
