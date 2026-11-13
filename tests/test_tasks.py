@@ -13,6 +13,7 @@ from app.core.security import create_access_token
 from app.db.session import create_database_engine
 from app.main import app
 from app.models import Project, Task
+from app.models.enums import ProjectStatus
 from app.repositories.task import TaskRepository
 from tests.conftest import TEST_JWT_SECRET
 
@@ -127,6 +128,11 @@ def test_patch_rejects_null_without_corrupting_data(
 
 
 def test_patch_allows_clearing_nullable_fields(client: TestClient) -> None:
+    member_res = client.post(
+        "/api/v1/workspaces/1/members",
+        json={"user_id": 2, "role": "EDITOR"},
+    )
+    assert member_res.status_code == 201
     task = create_task(
         client, description="Clear me", assignee_id=2, due_date="2026-12-01T12:00:00"
     )
@@ -282,7 +288,9 @@ def test_repository_dependency_can_be_overridden(client: TestClient) -> None:
         priority="MEDIUM",
         created_at=datetime(2026, 11, 6),
     )
-    repository.project_exists.return_value = True
+    repository.get_project.return_value = Project(
+        id=1, workspace_id=1, name="Backend", status=ProjectStatus.ACTIVE
+    )
     repository.user_exists.return_value = True
 
     def create_in_injected_repository(task: Task) -> Task:
@@ -329,7 +337,15 @@ def test_filter_tasks_by_project(client: TestClient, database_url: str) -> None:
 def test_foreign_key_conflict_is_safe_and_rolls_back(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(TaskRepository, "project_exists", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        TaskRepository,
+        "get_project",
+        AsyncMock(
+            return_value=Project(
+                id=999, workspace_id=1, name="Ghost", status=ProjectStatus.ACTIVE
+            )
+        ),
+    )
     response = client.post(
         "/api/v1/tasks",
         json={"title": "Invalid reference", "project_id": 999},
@@ -356,6 +372,12 @@ def test_invalid_response_is_not_returned_to_client(database_url: str) -> None:
 
 
 def test_task_creator_comes_from_authenticated_user(database_url: str) -> None:
+    with TestClient(app, headers=auth_headers(1)) as owner_client:
+        member_res = owner_client.post(
+            "/api/v1/workspaces/1/members",
+            json={"user_id": 2, "role": "EDITOR"},
+        )
+        assert member_res.status_code == 201
     with TestClient(app, headers=auth_headers(2)) as member_client:
         task = create_task(member_client, "Member task")
         assert task["created_by"] == 2
@@ -366,6 +388,8 @@ def test_task_creator_comes_from_authenticated_user(database_url: str) -> None:
     [
         ("post", "/api/v1/tasks", {"title": "Task", "project_id": 1}),
         ("get", "/api/v1/tasks", None),
+        ("post", "/api/v1/projects/1/tasks", {"title": "Task"}),
+        ("get", "/api/v1/projects/1/tasks", None),
         ("get", "/api/v1/tasks/1", None),
         ("patch", "/api/v1/tasks/1", {"title": "Updated"}),
         ("delete", "/api/v1/tasks/1", None),

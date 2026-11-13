@@ -57,16 +57,6 @@ async def get_current_user(
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 
-def get_task_repository(session: SessionDep) -> TaskRepository:
-    return TaskRepository(session)
-
-
-def get_task_service(
-    repository: Annotated[TaskRepository, Depends(get_task_repository)],
-) -> TaskService:
-    return TaskService(repository)
-
-
 def get_workspace_repository(session: SessionDep) -> WorkspaceRepository:
     return WorkspaceRepository(session)
 
@@ -88,3 +78,16 @@ def get_project_service(
     ],
 ) -> ProjectService:
     return ProjectService(repository, workspace_repository)
+
+
+def get_task_repository(session: SessionDep) -> TaskRepository:
+    return TaskRepository(session)
+
+
+def get_task_service(
+    repository: Annotated[TaskRepository, Depends(get_task_repository)],
+    workspace_repository: Annotated[
+        WorkspaceRepository, Depends(get_workspace_repository)
+    ],
+) -> TaskService:
+    return TaskService(repository, workspace_repository)

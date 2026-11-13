@@ -83,6 +83,17 @@ class WorkspaceRepository(BaseRepository[Workspace]):
         )
         return await self.session.scalar(statement)
 
+    async def get_effective_role(
+        self, workspace_id: int, user_id: int
+    ) -> WorkspaceRole | None:
+        role = await self.get_member_role(workspace_id, user_id)
+        if role is not None:
+            return role
+        workspace = await self.get(workspace_id)
+        if workspace is not None and workspace.owner_id == user_id:
+            return WorkspaceRole.OWNER
+        return None
+
     async def list_members(self, workspace_id: int) -> Sequence[WorkspaceMember]:
         statement = (
             select(WorkspaceMember)
