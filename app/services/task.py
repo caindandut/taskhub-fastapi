@@ -2,7 +2,6 @@ from app.core.constants import (
     ASSIGNEE_NOT_FOUND,
     ASSIGNEE_NOT_WORKSPACE_MEMBER,
     CREATOR_NOT_FOUND,
-    PROJECT_ARCHIVED,
     PROJECT_FORBIDDEN,
     PROJECT_NOT_FOUND,
     TASK_FORBIDDEN,
@@ -10,11 +9,10 @@ from app.core.constants import (
 )
 from app.core.exceptions import (
     BadRequestException,
-    ForbiddenException,
     NotFoundException,
 )
 from app.models import Project, Task, User
-from app.models.enums import ProjectStatus, UserRole, WorkspaceRole
+from app.models.enums import UserRole
 from app.repositories.task import TaskRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.schemas.task import (
@@ -25,6 +23,7 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
+from app.services.permissions import require_project_access
 
 
 class TaskService:
@@ -50,14 +49,13 @@ class TaskService:
         write: bool = False,
         forbidden_message: str = PROJECT_FORBIDDEN,
     ) -> None:
-        if user.role != UserRole.ADMIN:
-            role = await self.workspace_repository.get_effective_role(
-                project.workspace_id, user.id
-            )
-            if role is None or (write and role == WorkspaceRole.VIEWER):
-                raise ForbiddenException(forbidden_message)
-        if write and project.status == ProjectStatus.ARCHIVED:
-            raise BadRequestException(PROJECT_ARCHIVED)
+        await require_project_access(
+            self.workspace_repository,
+            project,
+            user,
+            write=write,
+            forbidden_message=forbidden_message,
+        )
 
     async def get(self, task_id: int, user: User) -> Task:
         task = await self.repository.get(task_id)
