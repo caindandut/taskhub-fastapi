@@ -1,4 +1,5 @@
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from pydantic import PositiveInt, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -8,6 +9,7 @@ from sqlalchemy.exc import ArgumentError
 from app.core.constants import (
     DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES,
     DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS,
+    DEFAULT_TASK_CACHE_TTL_SECONDS,
     JWT_ALGORITHM_HS256,
     JWT_SECRET_MIN_LENGTH,
 )
@@ -26,6 +28,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = JWT_ALGORITHM_HS256
     access_token_expire_minutes: PositiveInt = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
     refresh_token_expire_days: PositiveInt = DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS
+    redis_url: str | None = None
+    task_cache_ttl_seconds: PositiveInt = DEFAULT_TASK_CACHE_TTL_SECONDS
 
     @field_validator("database_url")
     @classmethod
@@ -60,6 +64,21 @@ class Settings(BaseSettings):
         if value != JWT_ALGORITHM_HS256:
             raise ValueError(f"JWT_ALGORITHM must be {JWT_ALGORITHM_HS256}")
         return value
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def validate_redis_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        parsed = urlparse(trimmed)
+        if parsed.scheme not in {"redis", "rediss"}:
+            raise ValueError("REDIS_URL must start with redis:// or rediss://")
+        if not parsed.hostname:
+            raise ValueError("REDIS_URL must include a hostname")
+        return trimmed
 
 
 @lru_cache

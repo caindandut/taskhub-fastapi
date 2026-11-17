@@ -17,6 +17,7 @@ from app.models.enums import ProjectStatus, UserRole, WorkspaceRole
 from app.repositories.project import ProjectRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.schemas.project import ProjectCreate, ProjectUpdate
+from app.services.cache import TaskCacheService
 
 
 class ProjectService:
@@ -24,9 +25,11 @@ class ProjectService:
         self,
         repository: ProjectRepository,
         workspace_repository: WorkspaceRepository,
+        cache_service: TaskCacheService | None = None,
     ) -> None:
         self.repository = repository
         self.workspace_repository = workspace_repository
+        self.cache_service = cache_service or TaskCacheService()
 
     async def _get_membership_role(
         self, workspace_id: int, user: User
@@ -101,7 +104,9 @@ class ProjectService:
         values = payload.model_dump(exclude_unset=True)
         if not values:
             return project
-        return await self.repository.update(project, values)
+        updated = await self.repository.update(project, values)
+        await self.cache_service.invalidate_project_tasks(project_id)
+        return updated
 
     async def delete(self, project_id: int, user: User) -> None:
         project = await self.repository.get(project_id)
@@ -114,3 +119,4 @@ class ProjectService:
                 raise ForbiddenException(PROJECT_FORBIDDEN)
 
         await self.repository.delete(project)
+        await self.cache_service.invalidate_project_tasks(project_id)

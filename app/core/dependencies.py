@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -17,6 +18,7 @@ from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.services.auth import AuthService
+from app.services.cache import TaskCacheService
 from app.services.comment import CommentService
 from app.services.label import LabelService
 from app.services.project import ProjectService
@@ -71,6 +73,20 @@ def get_workspace_service(
     return WorkspaceService(repository)
 
 
+def get_redis_client(request: Request) -> Redis | None:
+    return getattr(request.app.state, "redis_client", None)
+
+
+def get_task_cache_service(
+    redis_client: Annotated[Redis | None, Depends(get_redis_client)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> TaskCacheService:
+    return TaskCacheService(
+        redis_client=redis_client,
+        ttl_seconds=settings.task_cache_ttl_seconds,
+    )
+
+
 def get_project_repository(session: SessionDep) -> ProjectRepository:
     return ProjectRepository(session)
 
@@ -80,8 +96,9 @@ def get_project_service(
     workspace_repository: Annotated[
         WorkspaceRepository, Depends(get_workspace_repository)
     ],
+    cache_service: Annotated[TaskCacheService, Depends(get_task_cache_service)],
 ) -> ProjectService:
-    return ProjectService(repository, workspace_repository)
+    return ProjectService(repository, workspace_repository, cache_service)
 
 
 def get_task_repository(session: SessionDep) -> TaskRepository:
@@ -93,8 +110,9 @@ def get_task_service(
     workspace_repository: Annotated[
         WorkspaceRepository, Depends(get_workspace_repository)
     ],
+    cache_service: Annotated[TaskCacheService, Depends(get_task_cache_service)],
 ) -> TaskService:
-    return TaskService(repository, workspace_repository)
+    return TaskService(repository, workspace_repository, cache_service)
 
 
 def get_label_repository(session: SessionDep) -> LabelRepository:
@@ -108,9 +126,14 @@ def get_label_service(
     workspace_repository: Annotated[
         WorkspaceRepository, Depends(get_workspace_repository)
     ],
+    cache_service: Annotated[TaskCacheService, Depends(get_task_cache_service)],
 ) -> LabelService:
     return LabelService(
-        repository, project_repository, task_repository, workspace_repository
+        repository,
+        project_repository,
+        task_repository,
+        workspace_repository,
+        cache_service,
     )
 
 

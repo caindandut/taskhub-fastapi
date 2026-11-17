@@ -23,6 +23,7 @@ from app.schemas.task import (
     TaskRead,
     TaskUpdate,
 )
+from app.services.cache import TaskCacheService
 from app.services.permissions import require_project_access
 
 
@@ -31,9 +32,11 @@ class TaskService:
         self,
         repository: TaskRepository,
         workspace_repository: WorkspaceRepository,
+        cache_service: TaskCacheService | None = None,
     ) -> None:
         self.repository = repository
         self.workspace_repository = workspace_repository
+        self.cache_service = cache_service or TaskCacheService()
 
     async def _require_project(self, project_id: int) -> Project:
         project = await self.repository.get_project(project_id)
@@ -74,9 +77,11 @@ class TaskService:
         if not await self.repository.user_exists(user.id):
             raise NotFoundException(CREATOR_NOT_FOUND)
         await self.check_assignee(payload.assignee_id, project.workspace_id)
-        return await self.repository.create(
+        task = await self.repository.create(
             Task(**payload.model_dump(), created_by=user.id)
         )
+        await self.cache_service.invalidate_project_tasks(payload.project_id)
+        return task
 
     async def list(self, query: TaskQuery, user: User) -> TaskPage:
         is_admin = user.role == UserRole.ADMIN
@@ -97,8 +102,13 @@ class TaskService:
     ) -> TaskPage:
         project = await self._require_project(project_id)
         await self._check_project_access(project, user, write=False)
+        cached = await self.cache_service.get_project_tasks(project_id, query)
+        if cached is not None:
+            return cached
         task_query = TaskQuery(**query.model_dump(), project_id=project_id)
-        return await self.list(task_query, user)
+        page = await self.list(task_query, user)
+        await self.cache_service.set_project_tasks(project_id, query, page)
+        return page
 
     async def update(self, task_id: int, payload: TaskUpdate, user: User) -> Task:
         task = await self.repository.get(task_id)
@@ -113,7 +123,9 @@ class TaskService:
             await self.check_assignee(payload.assignee_id, project.workspace_id)
         if not values:
             return task
-        return await self.repository.update(task, values)
+        updated = await self.repository.update(task, values)
+        await self.cache_service.invalidate_project_tasks(task.project_id)
+        return updated
 
     async def delete(self, task_id: int, user: User) -> None:
         task = await self.repository.get(task_id)
@@ -123,7 +135,9 @@ class TaskService:
         await self._check_project_access(
             project, user, write=True, forbidden_message=TASK_FORBIDDEN
         )
+        project_id = task.project_id
         await self.repository.delete(task)
+        await self.cache_service.invalidate_project_tasks(project_id)
 
     async def check_assignee(self, assignee_id: int | None, workspace_id: int) -> None:
         if assignee_id is None:

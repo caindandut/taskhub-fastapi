@@ -13,3 +13,4 @@ PyJWT==2.15.1
 pwdlib[argon2]==0.3.1
 email-validator==2.3.0
 python-multipart==0.0.33
+redis==8.1.0
