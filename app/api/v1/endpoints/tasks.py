@@ -1,8 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
+from app.api.v1.params import ProjectID, TaskID
 from app.core.constants import (
+    ASSIGNEE_NOT_FOUND,
+    ASSIGNEE_NOT_WORKSPACE_MEMBER,
     DATABASE_CONFLICT,
     NOT_AUTHENTICATED,
     PROJECT_ARCHIVED,
@@ -25,8 +28,6 @@ from app.services.task import TaskService
 
 router = APIRouter(tags=["Tasks"])
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
-TaskID = Annotated[int, Path(gt=0, description="Task ID")]
-ProjectID = Annotated[int, Path(gt=0, description="Project ID")]
 
 
 @router.post(
@@ -35,10 +36,10 @@ ProjectID = Annotated[int, Path(gt=0, description="Project ID")]
     status_code=status.HTTP_201_CREATED,
     summary="Create a task in project",
     responses={
-        400: {"description": PROJECT_ARCHIVED},
+        400: {"description": f"{PROJECT_ARCHIVED} / {ASSIGNEE_NOT_WORKSPACE_MEMBER}"},
         401: {"description": NOT_AUTHENTICATED},
         403: {"description": PROJECT_FORBIDDEN},
-        404: {"description": PROJECT_NOT_FOUND},
+        404: {"description": f"{PROJECT_NOT_FOUND} / {ASSIGNEE_NOT_FOUND}"},
         409: {"description": DATABASE_CONFLICT},
     },
 )
@@ -48,10 +49,7 @@ async def create_project_task(
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> TaskRead:
-    task = await service.create(
-        TaskCreate(**payload.model_dump(), project_id=project_id),
-        user=current_user,
-    )
+    task = await service.create(project_id, payload, user=current_user)
     return TaskRead.model_validate(task)
 
 
@@ -80,10 +78,10 @@ async def list_project_tasks(
     status_code=status.HTTP_201_CREATED,
     summary="Create a task",
     responses={
-        400: {"description": PROJECT_ARCHIVED},
+        400: {"description": f"{PROJECT_ARCHIVED} / {ASSIGNEE_NOT_WORKSPACE_MEMBER}"},
         401: {"description": NOT_AUTHENTICATED},
         403: {"description": PROJECT_FORBIDDEN},
-        404: {"description": "Related resource not found"},
+        404: {"description": f"{PROJECT_NOT_FOUND} / {ASSIGNEE_NOT_FOUND}"},
         409: {"description": DATABASE_CONFLICT},
     },
 )
@@ -92,7 +90,7 @@ async def create_task(
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> TaskRead:
-    task = await service.create(payload, user=current_user)
+    task = await service.create(payload.project_id, payload, user=current_user)
     return TaskRead.model_validate(task)
 
 
@@ -134,10 +132,10 @@ async def get_task(
     response_model=TaskRead,
     summary="Update a task",
     responses={
-        400: {"description": PROJECT_ARCHIVED},
+        400: {"description": f"{PROJECT_ARCHIVED} / {ASSIGNEE_NOT_WORKSPACE_MEMBER}"},
         401: {"description": NOT_AUTHENTICATED},
         403: {"description": TASK_FORBIDDEN},
-        404: {"description": "Task or assignee not found"},
+        404: {"description": f"{TASK_NOT_FOUND} / {ASSIGNEE_NOT_FOUND}"},
         409: {"description": DATABASE_CONFLICT},
     },
 )

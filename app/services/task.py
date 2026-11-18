@@ -1,89 +1,65 @@
 from app.core.constants import (
     ASSIGNEE_NOT_FOUND,
     ASSIGNEE_NOT_WORKSPACE_MEMBER,
-    CREATOR_NOT_FOUND,
-    PROJECT_FORBIDDEN,
-    PROJECT_NOT_FOUND,
-    TASK_FORBIDDEN,
-    TASK_NOT_FOUND,
 )
-from app.core.exceptions import (
-    BadRequestException,
-    NotFoundException,
-)
-from app.models import Project, Task, User
+from app.core.exceptions import BadRequestException, NotFoundException
+from app.models import Task, User
 from app.models.enums import UserRole
+from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.schemas.task import (
     ProjectTaskQuery,
-    TaskCreate,
+    TaskFields,
     TaskPage,
     TaskQuery,
     TaskRead,
     TaskUpdate,
 )
-from app.services.permissions import require_project_access
+from app.services.permissions import load_project_for_user, load_task_for_user
 
 
 class TaskService:
     def __init__(
         self,
         repository: TaskRepository,
+        project_repository: ProjectRepository,
         workspace_repository: WorkspaceRepository,
     ) -> None:
         self.repository = repository
+        self.project_repository = project_repository
         self.workspace_repository = workspace_repository
 
-    async def _require_project(self, project_id: int) -> Project:
-        project = await self.repository.get_project(project_id)
-        if project is None:
-            raise NotFoundException(PROJECT_NOT_FOUND)
-        return project
-
-    async def _check_project_access(
-        self,
-        project: Project,
-        user: User,
-        *,
-        write: bool = False,
-        forbidden_message: str = PROJECT_FORBIDDEN,
-    ) -> None:
-        await require_project_access(
-            self.workspace_repository,
-            project,
-            user,
-            write=write,
-            forbidden_message=forbidden_message,
-        )
-
     async def get(self, task_id: int, user: User) -> Task:
-        task = await self.repository.get(task_id)
-        if task is None:
-            raise NotFoundException(TASK_NOT_FOUND)
-        if user.role != UserRole.ADMIN:
-            project = await self._require_project(task.project_id)
-            await self._check_project_access(
-                project, user, write=False, forbidden_message=TASK_FORBIDDEN
-            )
+        task, _, _ = await load_task_for_user(
+            self.repository,
+            self.project_repository,
+            self.workspace_repository,
+            task_id,
+            user,
+            write=False,
+        )
         return task
 
-    async def create(self, payload: TaskCreate, user: User) -> Task:
-        project = await self._require_project(payload.project_id)
-        await self._check_project_access(project, user, write=True)
-        if not await self.repository.user_exists(user.id):
-            raise NotFoundException(CREATOR_NOT_FOUND)
+    async def create(self, project_id: int, payload: TaskFields, user: User) -> Task:
+        project, _ = await load_project_for_user(
+            self.project_repository,
+            self.workspace_repository,
+            project_id,
+            user,
+            write=True,
+        )
         await self.check_assignee(payload.assignee_id, project.workspace_id)
+        data = payload.model_dump(exclude={"project_id"})
         return await self.repository.create(
-            Task(**payload.model_dump(), created_by=user.id)
+            Task(**data, project_id=project_id, created_by=user.id)
         )
 
     async def list(self, query: TaskQuery, user: User) -> TaskPage:
-        is_admin = user.role == UserRole.ADMIN
         tasks, total = await self.repository.search(
+            query,
             user_id=user.id,
-            is_admin=is_admin,
-            **query.model_dump(),
+            is_admin=user.role == UserRole.ADMIN,
         )
         return TaskPage(
             items=[TaskRead.model_validate(task) for task in tasks],
@@ -95,18 +71,24 @@ class TaskService:
     async def list_by_project(
         self, project_id: int, query: ProjectTaskQuery, user: User
     ) -> TaskPage:
-        project = await self._require_project(project_id)
-        await self._check_project_access(project, user, write=False)
+        await load_project_for_user(
+            self.project_repository,
+            self.workspace_repository,
+            project_id,
+            user,
+            write=False,
+        )
         task_query = TaskQuery(**query.model_dump(), project_id=project_id)
         return await self.list(task_query, user)
 
     async def update(self, task_id: int, payload: TaskUpdate, user: User) -> Task:
-        task = await self.repository.get(task_id)
-        if task is None:
-            raise NotFoundException(TASK_NOT_FOUND)
-        project = await self._require_project(task.project_id)
-        await self._check_project_access(
-            project, user, write=True, forbidden_message=TASK_FORBIDDEN
+        task, project, _ = await load_task_for_user(
+            self.repository,
+            self.project_repository,
+            self.workspace_repository,
+            task_id,
+            user,
+            write=True,
         )
         values = payload.model_dump(exclude_unset=True)
         if "assignee_id" in values:
@@ -116,12 +98,13 @@ class TaskService:
         return await self.repository.update(task, values)
 
     async def delete(self, task_id: int, user: User) -> None:
-        task = await self.repository.get(task_id)
-        if task is None:
-            raise NotFoundException(TASK_NOT_FOUND)
-        project = await self._require_project(task.project_id)
-        await self._check_project_access(
-            project, user, write=True, forbidden_message=TASK_FORBIDDEN
+        task, _, _ = await load_task_for_user(
+            self.repository,
+            self.project_repository,
+            self.workspace_repository,
+            task_id,
+            user,
+            write=True,
         )
         await self.repository.delete(task)
 

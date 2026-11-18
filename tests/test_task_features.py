@@ -208,6 +208,18 @@ def test_task_rbac_and_workspace_isolation(
     u2_tasks = client.get("/api/v1/tasks", headers=auth_headers(2)).json()
     assert [t["id"] for t in u2_tasks["items"]] == [other_task["id"]]
 
+    # Filtering /api/v1/tasks by project_id of another workspace without permission returns empty
+    u2_forbidden_filter = client.get(
+        "/api/v1/tasks", headers=auth_headers(2), params={"project_id": 1}
+    )
+    assert u2_forbidden_filter.status_code == 200
+    assert u2_forbidden_filter.json() == {
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "limit": 10,
+    }
+
     u1_tasks = client.get("/api/v1/tasks", headers=auth_headers(1)).json()
     assert [t["id"] for t in u1_tasks["items"]] == [task_id]
 

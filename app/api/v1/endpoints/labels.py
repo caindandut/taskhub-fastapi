@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
+from app.api.v1.params import LabelID, ProjectID, TaskID
 from app.core.constants import (
     DATABASE_CONFLICT,
     LABEL_ALREADY_ATTACHED,
@@ -18,15 +19,11 @@ from app.core.constants import (
     TASK_NOT_FOUND,
 )
 from app.core.dependencies import CurrentUserDep, get_label_service
-from app.models import Label
 from app.schemas.label import LabelCreate, LabelRead, LabelUpdate, TaskLabelRead
 from app.services.label import LabelService
 
 router = APIRouter(tags=["Labels"])
 LabelServiceDep = Annotated[LabelService, Depends(get_label_service)]
-ProjectID = Annotated[int, Path(gt=0, description="Project ID")]
-LabelID = Annotated[int, Path(gt=0, description="Label ID")]
-TaskID = Annotated[int, Path(gt=0, description="Task ID")]
 
 
 @router.post(
@@ -47,8 +44,9 @@ async def create_label(
     payload: LabelCreate,
     current_user: CurrentUserDep,
     service: LabelServiceDep,
-) -> Label:
-    return await service.create(project_id, payload, current_user)
+) -> LabelRead:
+    label = await service.create(project_id, payload, current_user)
+    return LabelRead.model_validate(label)
 
 
 @router.get(
@@ -65,8 +63,9 @@ async def list_project_labels(
     project_id: ProjectID,
     current_user: CurrentUserDep,
     service: LabelServiceDep,
-) -> list[Label]:
-    return await service.list_by_project(project_id, current_user)
+) -> list[LabelRead]:
+    labels = await service.list_by_project(project_id, current_user)
+    return [LabelRead.model_validate(label) for label in labels]
 
 
 @router.patch(
@@ -86,8 +85,9 @@ async def update_label(
     payload: LabelUpdate,
     current_user: CurrentUserDep,
     service: LabelServiceDep,
-) -> Label:
-    return await service.update(label_id, payload, current_user)
+) -> LabelRead:
+    label = await service.update(label_id, payload, current_user)
+    return LabelRead.model_validate(label)
 
 
 @router.delete(
@@ -124,8 +124,9 @@ async def list_task_labels(
     task_id: TaskID,
     current_user: CurrentUserDep,
     service: LabelServiceDep,
-) -> list[Label]:
-    return await service.list_for_task(task_id, current_user)
+) -> list[LabelRead]:
+    labels = await service.list_for_task(task_id, current_user)
+    return [LabelRead.model_validate(label) for label in labels]
 
 
 @router.post(

@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
+from app.api.v1.params import CommentID, TaskID
 from app.core.constants import (
     COMMENT_FORBIDDEN,
     COMMENT_NOT_FOUND,
@@ -10,13 +11,11 @@ from app.core.constants import (
     TASK_NOT_FOUND,
 )
 from app.core.dependencies import CurrentUserDep, get_comment_service
-from app.schemas.comment import CommentCreate, CommentRead
+from app.schemas.comment import CommentCreate, CommentPage, CommentQuery, CommentRead
 from app.services.comment import CommentService
 
 router = APIRouter(tags=["Comments"])
 CommentServiceDep = Annotated[CommentService, Depends(get_comment_service)]
-TaskID = Annotated[int, Path(gt=0, description="Task ID")]
-CommentID = Annotated[int, Path(gt=0, description="Comment ID")]
 
 
 @router.post(
@@ -43,7 +42,7 @@ async def create_comment(
 
 @router.get(
     "/tasks/{task_id}/comments",
-    response_model=list[CommentRead],
+    response_model=CommentPage,
     summary="List comments on a task",
     responses={
         401: {"description": NOT_AUTHENTICATED},
@@ -53,11 +52,11 @@ async def create_comment(
 )
 async def list_task_comments(
     task_id: TaskID,
+    query: Annotated[CommentQuery, Query()],
     current_user: CurrentUserDep,
     service: CommentServiceDep,
-) -> list[CommentRead]:
-    comments = await service.list_by_task(task_id, current_user)
-    return [CommentRead.model_validate(comment) for comment in comments]
+) -> CommentPage:
+    return await service.list_by_task(task_id, query, current_user)
 
 
 @router.delete(

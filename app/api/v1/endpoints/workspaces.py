@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
+from app.api.v1.params import MemberUserID, WorkspaceID
 from app.core.constants import (
     NOT_AUTHENTICATED,
     WORKSPACE_FORBIDDEN,
@@ -23,8 +24,6 @@ from app.services.workspace import WorkspaceService
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 WorkspaceServiceDep = Annotated[WorkspaceService, Depends(get_workspace_service)]
-WorkspaceID = Annotated[int, Path(gt=0, description="Workspace ID")]
-MemberUserID = Annotated[int, Path(gt=0, description="Member User ID")]
 
 
 @router.post(
