@@ -1,8 +1,10 @@
 import asyncio
 from collections.abc import Iterator
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core.constants import (
@@ -25,8 +27,9 @@ from app.core.constants import (
 from app.core.security import create_access_token
 from app.db.session import create_database_engine
 from app.main import app
-from app.models import Project, Task, User, Workspace, WorkspaceMember
+from app.models import Comment, Label, Project, Task, User, Workspace, WorkspaceMember
 from app.models.enums import ProjectStatus, UserRole, WorkspaceRole
+from app.repositories.label import LabelRepository
 from tests.conftest import TEST_JWT_SECRET, TEST_PASSWORD_HASH
 
 
@@ -557,7 +560,11 @@ def test_comment_crud_rbac_and_ownership(
     )
     list_res = client.get(f"/api/v1/tasks/{task1_id}/comments", headers=auth_headers(6))
     assert list_res.status_code == 200
-    assert [c["id"] for c in list_res.json()] == [c1["id"], c2["id"]]
+    comment_page = list_res.json()
+    assert comment_page["total"] == 2
+    assert comment_page["page"] == 1
+    assert comment_page["limit"] == 10
+    assert [c["id"] for c in comment_page["items"]] == [c1["id"], c2["id"]]
 
     # Ownership on DELETE:
     # - Editor 2 cannot delete Editor 1's comment -> 403
@@ -649,3 +656,170 @@ def test_comment_crud_rbac_and_ownership(
         ).status_code
         == 400
     )
+
+
+def test_cross_workspace_label_attach_returns_404_without_leaking(
+    client: TestClient, setup_data: dict[str, int]
+) -> None:
+    task1_id = setup_data["task1_id"]
+    # User 2 creates a label in project 3 (workspace 2, inaccessible to user 1)
+    ext_label = client.post(
+        "/api/v1/projects/3/labels",
+        headers=auth_headers(2),
+        json={"name": "Secret Label"},
+    ).json()
+
+    # User 1 tries to attach external label to task1 (project 1, workspace 1) -> 404 (not 400!)
+    res = client.post(
+        f"/api/v1/tasks/{task1_id}/labels/{ext_label['id']}",
+        headers=auth_headers(1),
+    )
+    assert res.status_code == 404
+    assert res.json() == {"detail": LABEL_NOT_FOUND}
+
+
+def test_delete_attached_label_and_cascade_delete_task_with_comments_and_labels(
+    client: TestClient, setup_data: dict[str, int], database_url: str
+) -> None:
+    task1_id = setup_data["task1_id"]
+    l1 = client.post(
+        "/api/v1/projects/1/labels",
+        headers=auth_headers(1),
+        json={"name": "Label A"},
+    ).json()
+    l2 = client.post(
+        "/api/v1/projects/1/labels",
+        headers=auth_headers(1),
+        json={"name": "Label B"},
+    ).json()
+
+    # Attach both labels to task1
+    assert (
+        client.post(
+            f"/api/v1/tasks/{task1_id}/labels/{l1['id']}", headers=auth_headers(1)
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"/api/v1/tasks/{task1_id}/labels/{l2['id']}", headers=auth_headers(1)
+        ).status_code
+        == 201
+    )
+
+    # Delete label l1 while attached -> task1 stays alive, l1 detached cleanly
+    assert (
+        client.delete(f"/api/v1/labels/{l1['id']}", headers=auth_headers(1)).status_code
+        == 204
+    )
+    assert (
+        client.get(f"/api/v1/tasks/{task1_id}", headers=auth_headers(1)).status_code
+        == 200
+    )
+    remaining_labels = client.get(
+        f"/api/v1/tasks/{task1_id}/labels", headers=auth_headers(1)
+    ).json()
+    assert [lbl["id"] for lbl in remaining_labels] == [l2["id"]]
+
+    # Add comment to task1, then delete task1 -> comment & task_labels cascade, l2 stays
+    c = client.post(
+        f"/api/v1/tasks/{task1_id}/comments",
+        headers=auth_headers(1),
+        json={"content": "Will cascade"},
+    ).json()
+    assert (
+        client.delete(f"/api/v1/tasks/{task1_id}", headers=auth_headers(1)).status_code
+        == 204
+    )
+
+    async def _verify_cascade() -> None:
+        engine = create_database_engine(database_url)
+        try:
+            factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with factory.begin() as session:
+                assert await session.get(Task, task1_id) is None
+                assert await session.get(Comment, c["id"]) is None
+                assert await session.get(Label, l2["id"]) is not None
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_verify_cascade())
+
+
+def test_comment_list_ordering_and_pagination(
+    client: TestClient, setup_data: dict[str, int]
+) -> None:
+    task1_id = setup_data["task1_id"]
+    created_ids = []
+    for content in ("First", "Second", "Third", "Fourth", "Fifth"):
+        res = client.post(
+            f"/api/v1/tasks/{task1_id}/comments",
+            headers=auth_headers(4),
+            json={"content": content},
+        )
+        assert res.status_code == 201
+        created_ids.append(res.json()["id"])
+
+    # Page 2 with limit=2 should return ["Third", "Fourth"] in chronological order
+    p2 = client.get(
+        f"/api/v1/tasks/{task1_id}/comments",
+        headers=auth_headers(6),
+        params={"page": 2, "limit": 2},
+    )
+    assert p2.status_code == 200
+    data = p2.json()
+    assert data["total"] == 5
+    assert data["page"] == 2
+    assert data["limit"] == 2
+    assert [c["content"] for c in data["items"]] == ["Third", "Fourth"]
+    assert [c["id"] for c in data["items"]] == created_ids[2:4]
+
+    # Invalid pagination query params -> 422
+    for bad in ({"page": 0}, {"limit": 0}, {"limit": 101}, {"extra": "1"}):
+        assert (
+            client.get(
+                f"/api/v1/tasks/{task1_id}/comments",
+                headers=auth_headers(6),
+                params=bad,
+            ).status_code
+            == 422
+        )
+
+
+def test_label_race_integrity_error_maps_to_specific_409(
+    client: TestClient, setup_data: dict[str, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task1_id = setup_data["task1_id"]
+    lbl = client.post(
+        "/api/v1/projects/1/labels",
+        headers=auth_headers(1),
+        json={"name": "Existing"},
+    ).json()
+
+    err = IntegrityError("INSERT", {}, Exception("unique violation"))
+
+    monkeypatch.setattr(LabelRepository, "create", AsyncMock(side_effect=err))
+    res_create = client.post(
+        "/api/v1/projects/1/labels",
+        headers=auth_headers(1),
+        json={"name": "RaceCreate"},
+    )
+    assert res_create.status_code == 409
+    assert res_create.json() == {"detail": LABEL_ALREADY_EXISTS}
+
+    monkeypatch.setattr(LabelRepository, "update", AsyncMock(side_effect=err))
+    res_update = client.patch(
+        f"/api/v1/labels/{lbl['id']}",
+        headers=auth_headers(1),
+        json={"name": "RaceUpdate"},
+    )
+    assert res_update.status_code == 409
+    assert res_update.json() == {"detail": LABEL_ALREADY_EXISTS}
+
+    monkeypatch.setattr(LabelRepository, "attach_to_task", AsyncMock(side_effect=err))
+    res_attach = client.post(
+        f"/api/v1/tasks/{task1_id}/labels/{lbl['id']}",
+        headers=auth_headers(1),
+    )
+    assert res_attach.status_code == 409
+    assert res_attach.json() == {"detail": LABEL_ALREADY_ATTACHED}

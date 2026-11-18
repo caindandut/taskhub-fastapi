@@ -107,12 +107,15 @@ def get_task_repository(session: SessionDep) -> TaskRepository:
 
 def get_task_service(
     repository: Annotated[TaskRepository, Depends(get_task_repository)],
+    project_repository: Annotated[ProjectRepository, Depends(get_project_repository)],
     workspace_repository: Annotated[
         WorkspaceRepository, Depends(get_workspace_repository)
     ],
     cache_service: Annotated[TaskCacheService, Depends(get_task_cache_service)],
 ) -> TaskService:
-    return TaskService(repository, workspace_repository, cache_service)
+    return TaskService(
+        repository, project_repository, workspace_repository, cache_service
+    )
 
 
 def get_label_repository(session: SessionDep) -> LabelRepository:

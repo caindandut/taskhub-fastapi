@@ -5,6 +5,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants import (
+    DEFAULT_LABEL_COLOR,
+    LABEL_COLOR_LENGTH,
+    LABEL_NAME_MAX_LENGTH,
+)
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -20,8 +25,10 @@ class Label(Base):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), index=True
     )
-    name: Mapped[str] = mapped_column(String(100))
-    color: Mapped[str] = mapped_column(String(7), server_default="#808080")
+    name: Mapped[str] = mapped_column(String(LABEL_NAME_MAX_LENGTH))
+    color: Mapped[str] = mapped_column(
+        String(LABEL_COLOR_LENGTH), server_default=DEFAULT_LABEL_COLOR
+    )
 
     project: Mapped[Project] = relationship(back_populates="labels", lazy="raise")
     tasks: Mapped[list[Task]] = relationship(

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
+from app.api.v1.params import ProjectID, WorkspaceID
 from app.core.constants import (
     NOT_AUTHENTICATED,
     PROJECT_FORBIDDEN,
@@ -19,8 +20,6 @@ from app.services.project import ProjectService
 
 router = APIRouter(tags=["Projects"])
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
-WorkspaceID = Annotated[int, Path(gt=0, description="Workspace ID")]
-ProjectID = Annotated[int, Path(gt=0, description="Project ID")]
 
 
 @router.post(

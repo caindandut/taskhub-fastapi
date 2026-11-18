@@ -4,28 +4,33 @@ from pydantic import ConfigDict, Field, PositiveInt, field_validator
 
 from app.core.constants import (
     DEFAULT_LABEL_COLOR,
-    FIELD_CANNOT_BE_NULL,
+    LABEL_COLOR_LENGTH,
+    LABEL_COLOR_PATTERN,
     LABEL_NAME_MAX_LENGTH,
     LABEL_NAME_MIN_LENGTH,
 )
+from app.core.messages import FIELD_CANNOT_BE_NULL
 from app.schemas.base import BaseSchema
 
 LabelName = Annotated[
     str, Field(min_length=LABEL_NAME_MIN_LENGTH, max_length=LABEL_NAME_MAX_LENGTH)
 ]
-HexColor = Annotated[str, Field(pattern=r"^#[0-9A-Fa-f]{6}$")]
+HexColor = Annotated[
+    str,
+    Field(
+        min_length=LABEL_COLOR_LENGTH,
+        max_length=LABEL_COLOR_LENGTH,
+        pattern=LABEL_COLOR_PATTERN,
+    ),
+]
 
 
 class LabelCreate(BaseSchema):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
     name: LabelName
     color: HexColor = DEFAULT_LABEL_COLOR
 
 
 class LabelUpdate(BaseSchema):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
     name: LabelName | None = None
     color: HexColor | None = None
 

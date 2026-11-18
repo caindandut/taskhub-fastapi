@@ -1,10 +1,9 @@
-from datetime import UTC, datetime
 from typing import Annotated
 
-from pydantic import ConfigDict, Field, PositiveInt, field_validator
+from pydantic import ConfigDict, Field, PositiveInt
 
 from app.core.constants import COMMENT_CONTENT_MAX_LENGTH, COMMENT_CONTENT_MIN_LENGTH
-from app.schemas.base import BaseSchema
+from app.schemas.base import BaseSchema, PaginatedPage, PaginationQuery, UtcDatetime
 
 CommentContent = Annotated[
     str,
@@ -13,23 +12,22 @@ CommentContent = Annotated[
 
 
 class CommentCreate(BaseSchema):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
     content: CommentContent
 
 
 class CommentRead(BaseSchema):
-    model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
+    model_config = ConfigDict(from_attributes=True)
 
     id: PositiveInt
     task_id: PositiveInt
     author_id: PositiveInt
     content: str
-    created_at: datetime
+    created_at: UtcDatetime
 
-    @field_validator("created_at", mode="after")
-    @classmethod
-    def ensure_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            return value.replace(tzinfo=UTC)
-        return value.astimezone(UTC)
+
+class CommentQuery(PaginationQuery):
+    pass
+
+
+class CommentPage(PaginatedPage):
+    items: list[CommentRead]

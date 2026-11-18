@@ -14,6 +14,7 @@ from app.db.session import create_database_engine
 from app.main import app
 from app.models import Project, Task
 from app.models.enums import ProjectStatus
+from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
 from tests.conftest import TEST_JWT_SECRET
 
@@ -288,9 +289,6 @@ def test_repository_dependency_can_be_overridden(client: TestClient) -> None:
         priority="MEDIUM",
         created_at=datetime(2026, 11, 6),
     )
-    repository.get_project.return_value = Project(
-        id=1, workspace_id=1, name="Backend", status=ProjectStatus.ACTIVE
-    )
     repository.user_exists.return_value = True
 
     def create_in_injected_repository(task: Task) -> Task:
@@ -338,8 +336,8 @@ def test_foreign_key_conflict_is_safe_and_rolls_back(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        TaskRepository,
-        "get_project",
+        ProjectRepository,
+        "get",
         AsyncMock(
             return_value=Project(
                 id=999, workspace_id=1, name="Ghost", status=ProjectStatus.ACTIVE
