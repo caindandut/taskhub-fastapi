@@ -9,12 +9,16 @@ from app.core.constants import NOT_AUTHENTICATED
 from app.core.exceptions import AuthenticationException
 from app.db.session import get_session
 from app.models import User
+from app.repositories.comment import CommentRepository
+from app.repositories.label import LabelRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.services.auth import AuthService
+from app.services.comment import CommentService
+from app.services.label import LabelService
 from app.services.project import ProjectService
 from app.services.task import TaskService
 from app.services.workspace import WorkspaceService
@@ -57,16 +61,6 @@ async def get_current_user(
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 
-def get_task_repository(session: SessionDep) -> TaskRepository:
-    return TaskRepository(session)
-
-
-def get_task_service(
-    repository: Annotated[TaskRepository, Depends(get_task_repository)],
-) -> TaskService:
-    return TaskService(repository)
-
-
 def get_workspace_repository(session: SessionDep) -> WorkspaceRepository:
     return WorkspaceRepository(session)
 
@@ -88,3 +82,51 @@ def get_project_service(
     ],
 ) -> ProjectService:
     return ProjectService(repository, workspace_repository)
+
+
+def get_task_repository(session: SessionDep) -> TaskRepository:
+    return TaskRepository(session)
+
+
+def get_task_service(
+    repository: Annotated[TaskRepository, Depends(get_task_repository)],
+    project_repository: Annotated[ProjectRepository, Depends(get_project_repository)],
+    workspace_repository: Annotated[
+        WorkspaceRepository, Depends(get_workspace_repository)
+    ],
+) -> TaskService:
+    return TaskService(repository, project_repository, workspace_repository)
+
+
+def get_label_repository(session: SessionDep) -> LabelRepository:
+    return LabelRepository(session)
+
+
+def get_label_service(
+    repository: Annotated[LabelRepository, Depends(get_label_repository)],
+    project_repository: Annotated[ProjectRepository, Depends(get_project_repository)],
+    task_repository: Annotated[TaskRepository, Depends(get_task_repository)],
+    workspace_repository: Annotated[
+        WorkspaceRepository, Depends(get_workspace_repository)
+    ],
+) -> LabelService:
+    return LabelService(
+        repository, project_repository, task_repository, workspace_repository
+    )
+
+
+def get_comment_repository(session: SessionDep) -> CommentRepository:
+    return CommentRepository(session)
+
+
+def get_comment_service(
+    repository: Annotated[CommentRepository, Depends(get_comment_repository)],
+    task_repository: Annotated[TaskRepository, Depends(get_task_repository)],
+    project_repository: Annotated[ProjectRepository, Depends(get_project_repository)],
+    workspace_repository: Annotated[
+        WorkspaceRepository, Depends(get_workspace_repository)
+    ],
+) -> CommentService:
+    return CommentService(
+        repository, task_repository, project_repository, workspace_repository
+    )

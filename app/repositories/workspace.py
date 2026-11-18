@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.constants import DEFAULT_PAGE_SIZE
 from app.models import User, Workspace, WorkspaceMember
@@ -13,6 +14,13 @@ from app.repositories.base import BaseRepository
 class WorkspaceRepository(BaseRepository[Workspace]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Workspace, session)
+
+    @staticmethod
+    def accessible_workspace_filter(user_id: int) -> ColumnElement[bool]:
+        return or_(
+            Workspace.owner_id == user_id,
+            Workspace.members.any(WorkspaceMember.user_id == user_id),
+        )
 
     async def user_exists(self, user_id: int) -> bool:
         return await self.session.get(User, user_id) is not None
@@ -28,12 +36,7 @@ class WorkspaceRepository(BaseRepository[Workspace]):
     ) -> tuple[Sequence[Workspace], int]:
         filters = []
         if not is_admin:
-            filters.append(
-                or_(
-                    Workspace.owner_id == user_id,
-                    Workspace.members.any(WorkspaceMember.user_id == user_id),
-                )
-            )
+            filters.append(self.accessible_workspace_filter(user_id))
         if q is not None:
             filters.append(Workspace.name.icontains(q, autoescape=True))
 
@@ -82,6 +85,17 @@ class WorkspaceRepository(BaseRepository[Workspace]):
             WorkspaceMember.user_id == user_id,
         )
         return await self.session.scalar(statement)
+
+    async def get_effective_role(
+        self, workspace_id: int, user_id: int
+    ) -> WorkspaceRole | None:
+        role = await self.get_member_role(workspace_id, user_id)
+        if role is not None:
+            return role
+        workspace = await self.get(workspace_id)
+        if workspace is not None and workspace.owner_id == user_id:
+            return WorkspaceRole.OWNER
+        return None
 
     async def list_members(self, workspace_id: int) -> Sequence[WorkspaceMember]:
         statement = (
