@@ -21,6 +21,7 @@ from app.services.auth import AuthService
 from app.services.cache import TaskCacheService
 from app.services.comment import CommentService
 from app.services.label import LabelService
+from app.services.notification import NotificationService
 from app.services.project import ProjectService
 from app.services.task import TaskService
 from app.services.workspace import WorkspaceService
@@ -101,6 +102,23 @@ def get_project_service(
     return ProjectService(repository, workspace_repository, cache_service)
 
 
+def get_notification_service(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> NotificationService:
+    return NotificationService(
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port,
+        smtp_username=settings.smtp_username,
+        smtp_password=(
+            settings.smtp_password.get_secret_value()
+            if settings.smtp_password is not None
+            else None
+        ),
+        smtp_from_email=settings.smtp_from_email,
+        smtp_use_tls=settings.smtp_use_tls,
+    )
+
+
 def get_task_repository(session: SessionDep) -> TaskRepository:
     return TaskRepository(session)
 
@@ -112,9 +130,16 @@ def get_task_service(
         WorkspaceRepository, Depends(get_workspace_repository)
     ],
     cache_service: Annotated[TaskCacheService, Depends(get_task_cache_service)],
+    notification_service: Annotated[
+        NotificationService, Depends(get_notification_service)
+    ],
 ) -> TaskService:
     return TaskService(
-        repository, project_repository, workspace_repository, cache_service
+        repository,
+        project_repository,
+        workspace_repository,
+        cache_service,
+        notification_service,
     )
 
 

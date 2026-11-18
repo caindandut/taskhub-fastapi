@@ -1,7 +1,7 @@
 from functools import lru_cache
 from urllib.parse import urlparse
 
-from pydantic import PositiveInt, SecretStr, field_validator
+from pydantic import EmailStr, PositiveInt, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -9,6 +9,8 @@ from sqlalchemy.exc import ArgumentError
 from app.core.constants import (
     DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES,
     DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS,
+    DEFAULT_SMTP_FROM_EMAIL,
+    DEFAULT_SMTP_PORT,
     DEFAULT_TASK_CACHE_TTL_SECONDS,
     JWT_ALGORITHM_HS256,
     JWT_SECRET_MIN_LENGTH,
@@ -30,6 +32,12 @@ class Settings(BaseSettings):
     refresh_token_expire_days: PositiveInt = DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS
     redis_url: str | None = None
     task_cache_ttl_seconds: PositiveInt = DEFAULT_TASK_CACHE_TTL_SECONDS
+    smtp_host: str | None = None
+    smtp_port: PositiveInt = DEFAULT_SMTP_PORT
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from_email: EmailStr = DEFAULT_SMTP_FROM_EMAIL
+    smtp_use_tls: bool = True
 
     @field_validator("database_url")
     @classmethod
@@ -79,6 +87,14 @@ class Settings(BaseSettings):
         if not parsed.hostname:
             raise ValueError("REDIS_URL must include a hostname")
         return trimmed
+
+    @field_validator("smtp_host", "smtp_username", mode="before")
+    @classmethod
+    def normalize_optional_str(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
 
 
 @lru_cache

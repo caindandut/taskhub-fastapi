@@ -92,8 +92,8 @@ def test_cache_hit_miss_and_ttl(
 
     search_spy = AsyncMock(wraps=TaskRepository.search)
 
-    async def wrapped_search(self: TaskRepository, **kwargs):
-        return await search_spy(self, **kwargs)
+    async def wrapped_search(self: TaskRepository, *args, **kwargs):
+        return await search_spy(self, *args, **kwargs)
 
     monkeypatch.setattr(TaskRepository, "search", wrapped_search)
 
