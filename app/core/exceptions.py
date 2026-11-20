@@ -31,3 +31,13 @@ class AuthenticationException(AppException):
             status_code=status.HTTP_401_UNAUTHORIZED,
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+class ForbiddenException(AppException):
+    def __init__(self, message: str = "Forbidden") -> None:
+        super().__init__(message=message, status_code=status.HTTP_403_FORBIDDEN)
+
+
+class BadRequestException(AppException):
+    def __init__(self, message: str = "Bad request") -> None:
+        super().__init__(message=message, status_code=status.HTTP_400_BAD_REQUEST)

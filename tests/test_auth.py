@@ -314,7 +314,9 @@ def test_refresh_token_rotation_and_revocation(client: TestClient) -> None:
     assert reused_res.json() == {"detail": INVALID_TOKEN}
 
     # Reuse detection: when revoked token is reused, all tokens for the user are revoked
-    reused_victim_token = client.post("/api/v1/auth/refresh", json={"refresh_token": ref_3})
+    reused_victim_token = client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": ref_3}
+    )
     assert reused_victim_token.status_code == 401
     assert reused_victim_token.json() == {"detail": INVALID_TOKEN}
 

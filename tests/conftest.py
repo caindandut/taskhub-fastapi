@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import create_database_engine
-from app.models import Base, Project, User, Workspace
+from app.models import Base, Project, User, Workspace, WorkspaceMember
+from app.models.enums import WorkspaceRole
 
 TEST_JWT_SECRET = "test-secret-key-with-at-least-32-bytes!"
 TEST_USER_PASSWORD = "StrongPassword123!"
@@ -44,10 +45,14 @@ def database_url(
                     full_name="Owner",
                     hashed_password=TEST_PASSWORD_HASH,
                 )
+                workspace = Workspace(id=1, name="TaskHub", owner=owner)
+                workspace.members.append(
+                    WorkspaceMember(user=owner, role=WorkspaceRole.OWNER)
+                )
                 project = Project(
                     id=1,
                     name="Backend",
-                    workspace=Workspace(id=1, name="TaskHub", owner=owner),
+                    workspace=workspace,
                 )
                 session.add_all(
                     [
