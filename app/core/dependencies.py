@@ -27,7 +27,12 @@ from app.services.task import TaskService
 from app.services.workspace import WorkspaceService
 
 SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
-bearer_scheme = HTTPBearer(auto_error=False)
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    bearerFormat="JWT",
+    scheme_name="BearerAuth",
+    description="JWT access token returned by POST /api/v1/auth/login",
+)
 
 
 def get_user_repository(session: SessionDep) -> UserRepository:

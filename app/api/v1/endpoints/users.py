@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from app.core.constants import NOT_AUTHENTICATED
+from app.core.constants import INCORRECT_CURRENT_PASSWORD, NOT_AUTHENTICATED
 from app.core.dependencies import CurrentUserDep, get_auth_service
 from app.models import User
 from app.schemas.auth import ChangePasswordRequest
@@ -41,7 +41,9 @@ async def update_current_user_profile(
     "/me/change-password",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Change password for current user",
-    responses={401: {"description": NOT_AUTHENTICATED}},
+    responses={
+        401: {"description": f"{NOT_AUTHENTICATED} / {INCORRECT_CURRENT_PASSWORD}"}
+    },
 )
 async def change_user_password(
     payload: ChangePasswordRequest,

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.core.constants import DATABASE_CONFLICT
+from app.core.constants import DATABASE_CONFLICT, INTERNAL_SERVER_ERROR
 from app.core.dependencies import get_task_repository
 from app.core.security import create_access_token
 from app.db.session import create_database_engine
@@ -364,7 +364,8 @@ def test_invalid_response_is_not_returned_to_client(database_url: str) -> None:
         ) as client:
             response = client.get("/api/v1/tasks/1")
         assert response.status_code == 500
-        assert response.text == "Internal Server Error"
+        assert response.json() == {"detail": INTERNAL_SERVER_ERROR}
+        assert "Missing title" not in response.text
     finally:
         app.dependency_overrides.pop(get_task_repository)
 
