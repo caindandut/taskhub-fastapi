@@ -95,7 +95,9 @@ class TaskService:
         task = await self.repository.create(
             Task(**data, project_id=project_id, created_by=user.id)
         )
-        await self.cache_service.invalidate_project_tasks(project_id)
+        await self.cache_service.schedule_project_invalidation(
+            project_id, background_tasks
+        )
         if assignee is not None:
             self._schedule_assignment_notification(
                 background_tasks,
@@ -162,7 +164,9 @@ class TaskService:
         if not values:
             return task
         updated = await self.repository.update(task, values)
-        await self.cache_service.invalidate_project_tasks(task.project_id)
+        await self.cache_service.schedule_project_invalidation(
+            task.project_id, background_tasks
+        )
         if assignee is not None and updated.assignee_id != previous_assignee_id:
             self._schedule_assignment_notification(
                 background_tasks,
@@ -173,7 +177,12 @@ class TaskService:
             )
         return updated
 
-    async def delete(self, task_id: int, user: User) -> None:
+    async def delete(
+        self,
+        task_id: int,
+        user: User,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> None:
         task, _, _ = await load_task_for_user(
             self.repository,
             self.project_repository,
@@ -184,7 +193,9 @@ class TaskService:
         )
         project_id = task.project_id
         await self.repository.delete(task)
-        await self.cache_service.invalidate_project_tasks(project_id)
+        await self.cache_service.schedule_project_invalidation(
+            project_id, background_tasks
+        )
 
     async def check_assignee(
         self, assignee_id: int | None, workspace_id: int

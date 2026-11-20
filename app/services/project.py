@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from fastapi import BackgroundTasks
+
 from app.core.constants import (
     PROJECT_FORBIDDEN,
     WORKSPACE_FORBIDDEN,
@@ -96,11 +98,14 @@ class ProjectService:
         values = payload.model_dump(exclude_unset=True)
         if not values:
             return project
-        updated = await self.repository.update(project, values)
-        await self.cache_service.invalidate_project_tasks(project_id)
-        return updated
+        return await self.repository.update(project, values)
 
-    async def delete(self, project_id: int, user: User) -> None:
+    async def delete(
+        self,
+        project_id: int,
+        user: User,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> None:
         project, _ = await load_project_for_user(
             self.repository,
             self.workspace_repository,
@@ -110,4 +115,6 @@ class ProjectService:
             check_archived=False,
         )
         await self.repository.delete(project)
-        await self.cache_service.invalidate_project_tasks(project_id)
+        await self.cache_service.schedule_project_invalidation(
+            project_id, background_tasks
+        )

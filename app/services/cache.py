@@ -2,6 +2,7 @@ import logging
 from urllib.parse import quote
 
 import redis.asyncio as aioredis
+from fastapi import BackgroundTasks
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -91,3 +92,14 @@ class TaskCacheService:
                 project_id,
                 exc,
             )
+
+    async def schedule_project_invalidation(
+        self,
+        project_id: int,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> None:
+        """Run invalidation after commit via BackgroundTasks when available."""
+        if background_tasks is not None:
+            background_tasks.add_task(self.invalidate_project_tasks, project_id)
+            return
+        await self.invalidate_project_tasks(project_id)

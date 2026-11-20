@@ -159,14 +159,12 @@ def get_label_service(
     workspace_repository: Annotated[
         WorkspaceRepository, Depends(get_workspace_repository)
     ],
-    cache_service: Annotated[TaskCacheService, Depends(get_task_cache_service)],
 ) -> LabelService:
     return LabelService(
         repository,
         project_repository,
         task_repository,
         workspace_repository,
-        cache_service,
     )
 
 

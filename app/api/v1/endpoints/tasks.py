@@ -180,8 +180,9 @@ async def update_task(
 )
 async def delete_task(
     task_id: TaskID,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> Response:
-    await service.delete(task_id, current_user)
+    await service.delete(task_id, current_user, background_tasks=background_tasks)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
