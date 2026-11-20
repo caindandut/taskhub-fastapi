@@ -11,8 +11,11 @@ class TaskRepository(BaseRepository[Task]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Task, session)
 
+    async def get_user(self, user_id: int) -> User | None:
+        return await self.session.get(User, user_id)
+
     async def user_exists(self, user_id: int) -> bool:
-        return await self.session.get(User, user_id) is not None
+        return await self.get_user(user_id) is not None
 
     async def search(
         self,

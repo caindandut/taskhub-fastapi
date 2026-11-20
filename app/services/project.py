@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from fastapi import BackgroundTasks
+
 from app.core.constants import (
     PROJECT_FORBIDDEN,
     WORKSPACE_FORBIDDEN,
@@ -13,6 +15,7 @@ from app.models.enums import ProjectStatus, WorkspaceRole
 from app.repositories.project import ProjectRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.schemas.project import ProjectCreate, ProjectUpdate
+from app.services.cache import TaskCacheService
 from app.services.permissions import load_project_for_user, require_workspace_access
 
 
@@ -21,9 +24,11 @@ class ProjectService:
         self,
         repository: ProjectRepository,
         workspace_repository: WorkspaceRepository,
+        cache_service: TaskCacheService | None = None,
     ) -> None:
         self.repository = repository
         self.workspace_repository = workspace_repository
+        self.cache_service = cache_service or TaskCacheService()
 
     async def create(
         self, workspace_id: int, payload: ProjectCreate, user: User
@@ -95,7 +100,12 @@ class ProjectService:
             return project
         return await self.repository.update(project, values)
 
-    async def delete(self, project_id: int, user: User) -> None:
+    async def delete(
+        self,
+        project_id: int,
+        user: User,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> None:
         project, _ = await load_project_for_user(
             self.repository,
             self.workspace_repository,
@@ -105,3 +115,6 @@ class ProjectService:
             check_archived=False,
         )
         await self.repository.delete(project)
+        await self.cache_service.schedule_project_invalidation(
+            project_id, background_tasks
+        )

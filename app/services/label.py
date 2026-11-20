@@ -94,9 +94,10 @@ class LabelService:
             return label
         try:
             async with self.repository.session.begin_nested():
-                return await self.repository.update(label, values)
+                updated = await self.repository.update(label, values)
         except IntegrityError as exc:
             raise ConflictException(LABEL_ALREADY_EXISTS) from exc
+        return updated
 
     async def delete(self, label_id: int, user: User) -> None:
         label = await self._require_label(label_id)

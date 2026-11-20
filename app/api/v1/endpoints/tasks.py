@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 
 from app.api.v1.params import ProjectID, TaskID
 from app.core.constants import (
@@ -46,10 +46,16 @@ TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 async def create_project_task(
     project_id: ProjectID,
     payload: ProjectTaskCreate,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> TaskRead:
-    task = await service.create(project_id, payload, user=current_user)
+    task = await service.create(
+        project_id,
+        payload,
+        user=current_user,
+        background_tasks=background_tasks,
+    )
     return TaskRead.model_validate(task)
 
 
@@ -87,10 +93,16 @@ async def list_project_tasks(
 )
 async def create_task(
     payload: TaskCreate,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> TaskRead:
-    task = await service.create(payload.project_id, payload, user=current_user)
+    task = await service.create(
+        payload.project_id,
+        payload,
+        user=current_user,
+        background_tasks=background_tasks,
+    )
     return TaskRead.model_validate(task)
 
 
@@ -142,10 +154,16 @@ async def get_task(
 async def update_task(
     task_id: TaskID,
     payload: TaskUpdate,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> TaskRead:
-    task = await service.update(task_id, payload, current_user)
+    task = await service.update(
+        task_id,
+        payload,
+        current_user,
+        background_tasks=background_tasks,
+    )
     return TaskRead.model_validate(task)
 
 
@@ -162,8 +180,9 @@ async def update_task(
 )
 async def delete_task(
     task_id: TaskID,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     service: TaskServiceDep,
 ) -> Response:
-    await service.delete(task_id, current_user)
+    await service.delete(task_id, current_user, background_tasks=background_tasks)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

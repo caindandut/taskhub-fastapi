@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response, status
 
 from app.api.v1.params import ProjectID, WorkspaceID
 from app.core.constants import (
@@ -116,8 +116,9 @@ async def update_project(
 )
 async def delete_project(
     project_id: ProjectID,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUserDep,
     service: ProjectServiceDep,
 ) -> Response:
-    await service.delete(project_id, current_user)
+    await service.delete(project_id, current_user, background_tasks=background_tasks)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.constants import DATABASE_CONFLICT
 from app.core.exceptions import AppException
 from app.db.session import create_database_engine
+from app.services.cache import create_redis_client
 
 
 @asynccontextmanager
@@ -19,11 +20,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     engine = create_database_engine(settings.database_url.get_secret_value())
     app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    redis_client = (
+        create_redis_client(settings.redis_url) if settings.redis_url else None
+    )
+    app.state.redis_client = redis_client
     try:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
         yield
     finally:
+        if redis_client is not None:
+            await redis_client.aclose()
         await engine.dispose()
 
 
