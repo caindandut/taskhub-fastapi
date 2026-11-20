@@ -28,18 +28,20 @@ class ProjectService:
         self.repository = repository
         self.workspace_repository = workspace_repository
 
-    async def _get_membership_role(
-        self, workspace_id: int, user: User
-    ) -> WorkspaceRole | None:
+    async def _require_workspace_role(
+        self,
+        workspace_id: int,
+        user: User,
+        *,
+        allowed_roles: tuple[WorkspaceRole, ...] | None = None,
+        forbidden_message: str = PROJECT_FORBIDDEN,
+    ) -> WorkspaceRole:
         if user.role == UserRole.ADMIN:
             return WorkspaceRole.OWNER
-        role = await self.workspace_repository.get_member_role(workspace_id, user.id)
-        if role is not None:
-            return role
-        workspace = await self.workspace_repository.get(workspace_id)
-        if workspace is not None and workspace.owner_id == user.id:
-            return WorkspaceRole.OWNER
-        return None
+        role = await self.workspace_repository.get_effective_role(workspace_id, user.id)
+        if role is None or (allowed_roles is not None and role not in allowed_roles):
+            raise ForbiddenException(forbidden_message)
+        return role
 
     async def create(
         self, workspace_id: int, payload: ProjectCreate, user: User
@@ -48,12 +50,13 @@ class ProjectService:
         if workspace is None:
             raise NotFoundException(WORKSPACE_NOT_FOUND)
 
-        if user.role != UserRole.ADMIN:
-            role = await self._get_membership_role(workspace_id, user)
-            if role is None:
-                raise ForbiddenException(WORKSPACE_FORBIDDEN)
-            if role == WorkspaceRole.VIEWER:
-                raise ForbiddenException(PROJECT_FORBIDDEN)
+        role = await self._require_workspace_role(
+            workspace_id,
+            user,
+            forbidden_message=WORKSPACE_FORBIDDEN,
+        )
+        if role == WorkspaceRole.VIEWER:
+            raise ForbiddenException(PROJECT_FORBIDDEN)
 
         project = Project(
             workspace_id=workspace_id,
@@ -73,11 +76,11 @@ class ProjectService:
         if workspace is None:
             raise NotFoundException(WORKSPACE_NOT_FOUND)
 
-        if user.role != UserRole.ADMIN:
-            role = await self._get_membership_role(workspace_id, user)
-            if role is None:
-                raise ForbiddenException(WORKSPACE_FORBIDDEN)
-
+        await self._require_workspace_role(
+            workspace_id,
+            user,
+            forbidden_message=WORKSPACE_FORBIDDEN,
+        )
         return await self.repository.list_by_workspace(workspace_id, status=status)
 
     async def get(self, project_id: int, user: User) -> Project:
@@ -85,11 +88,7 @@ class ProjectService:
         if project is None:
             raise NotFoundException(PROJECT_NOT_FOUND)
 
-        if user.role != UserRole.ADMIN:
-            role = await self._get_membership_role(project.workspace_id, user)
-            if role is None:
-                raise ForbiddenException(PROJECT_FORBIDDEN)
-
+        await self._require_workspace_role(project.workspace_id, user)
         return project
 
     async def update(
@@ -99,10 +98,11 @@ class ProjectService:
         if project is None:
             raise NotFoundException(PROJECT_NOT_FOUND)
 
-        if user.role != UserRole.ADMIN:
-            role = await self._get_membership_role(project.workspace_id, user)
-            if role is None or role == WorkspaceRole.VIEWER:
-                raise ForbiddenException(PROJECT_FORBIDDEN)
+        await self._require_workspace_role(
+            project.workspace_id,
+            user,
+            allowed_roles=(WorkspaceRole.OWNER, WorkspaceRole.EDITOR),
+        )
 
         values = payload.model_dump(exclude_unset=True)
         if not values:
@@ -114,9 +114,9 @@ class ProjectService:
         if project is None:
             raise NotFoundException(PROJECT_NOT_FOUND)
 
-        if user.role != UserRole.ADMIN:
-            role = await self._get_membership_role(project.workspace_id, user)
-            if role != WorkspaceRole.OWNER:
-                raise ForbiddenException(PROJECT_FORBIDDEN)
-
+        await self._require_workspace_role(
+            project.workspace_id,
+            user,
+            allowed_roles=(WorkspaceRole.OWNER,),
+        )
         await self.repository.delete(project)

@@ -40,15 +40,8 @@ class WorkspaceService:
         if user.role == UserRole.ADMIN:
             return
 
-        role = await self.repository.get_member_role(workspace.id, user.id)
-        if role is None:
-            raise ForbiddenException(WORKSPACE_FORBIDDEN)
-
-        if (
-            require_owner
-            and role != WorkspaceRole.OWNER
-            and workspace.owner_id != user.id
-        ):
+        role = await self.repository.get_effective_role(workspace.id, user.id)
+        if role is None or (require_owner and role != WorkspaceRole.OWNER):
             raise ForbiddenException(WORKSPACE_FORBIDDEN)
 
     def _to_member_read(self, member: WorkspaceMember) -> WorkspaceMemberRead:
@@ -156,7 +149,7 @@ class WorkspaceService:
         if member is None:
             raise NotFoundException(MEMBER_NOT_FOUND)
 
-        if workspace.owner_id == target_user_id and payload.role != WorkspaceRole.OWNER:
+        if workspace.owner_id == target_user_id:
             raise BadRequestException(CANNOT_MODIFY_WORKSPACE_OWNER)
 
         member = await self.repository.update_member_role(member, payload.role)

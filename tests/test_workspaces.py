@@ -250,6 +250,16 @@ def test_workspace_membership_workflow(client: TestClient) -> None:
         == 403
     )
 
+    # 2b. Cannot add another member with OWNER role -> 422
+    assert (
+        client.post(
+            f"/api/v1/workspaces/{ws_id}/members",
+            headers=auth_headers(1),
+            json={"user_id": 2, "role": "OWNER"},
+        ).status_code
+        == 422
+    )
+
     # 3. Owner adds User 2 as EDITOR
     add_res = client.post(
         f"/api/v1/workspaces/{ws_id}/members",
@@ -310,6 +320,16 @@ def test_workspace_membership_workflow(client: TestClient) -> None:
     )
     assert patch_role.status_code == 200
     assert patch_role.json()["role"] == "VIEWER"
+
+    # 8b. Cannot promote member to OWNER role -> 422
+    assert (
+        client.patch(
+            f"/api/v1/workspaces/{ws_id}/members/2",
+            headers=auth_headers(1),
+            json={"role": "OWNER"},
+        ).status_code
+        == 422
+    )
 
     # 9. Cannot modify workspace owner's role
     demote_owner = client.patch(
