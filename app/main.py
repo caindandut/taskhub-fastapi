@@ -12,6 +12,7 @@ from app.core.constants import DEFAULT_APP_NAME, DEFAULT_APP_VERSION
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import DynamicCORSMiddleware, RequestContextMiddleware
+from app.core.openapi import configure_openapi
 from app.db.session import create_database_engine
 from app.services.cache import create_redis_client
 
@@ -62,6 +63,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title=title,
         version=version,
         lifespan=create_lifespan(settings),
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        swagger_ui_parameters={"persistAuthorization": True},
     )
 
     # Outer RequestContextMiddleware wraps DynamicCORSMiddleware so preflights and
@@ -71,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(application)
     application.include_router(api_router, prefix="/api/v1")
+    configure_openapi(application)
     return application
 
 
