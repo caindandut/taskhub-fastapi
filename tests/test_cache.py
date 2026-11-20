@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from redis.exceptions import ConnectionError as RedisConnectionError
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core.config import Settings, get_settings
@@ -14,7 +15,7 @@ from app.core.dependencies import get_redis_client
 from app.core.security import create_access_token
 from app.db.session import create_database_engine
 from app.main import app
-from app.models import Project
+from app.models import Project, Task
 from app.models.enums import ProjectStatus, TaskPriority, TaskStatus
 from app.repositories.task import TaskRepository
 from app.schemas.task import ProjectTaskQuery
@@ -257,8 +258,9 @@ def test_cache_invalidation_on_task_label_and_project_mutations(
     refreshed = client.get("/api/v1/projects/1/tasks", headers=auth_headers(1)).json()
     assert refreshed["items"][0]["title"] == "Task 1 Edited"
 
-    # 3. Attach & detach label on task invalidates project 1
+    # 3. Attach/detach/update/delete label does NOT scan/invalidate task cache
     warm_all()
+    deletes_before_labels = len(fake_redis.delete_calls)
     assert (
         client.post(
             f"/api/v1/tasks/{task['id']}/labels/{label['id']}",
@@ -266,9 +268,14 @@ def test_cache_invalidation_on_task_label_and_project_mutations(
         ).status_code
         == 201
     )
-    assert not any(k.startswith("tasks:project:1:") for k in fake_redis.store)
-
-    warm_all()
+    assert (
+        client.patch(
+            f"/api/v1/labels/{label['id']}",
+            headers=auth_headers(1),
+            json={"name": "Critical"},
+        ).status_code
+        == 200
+    )
     assert (
         client.delete(
             f"/api/v1/tasks/{task['id']}/labels/{label['id']}",
@@ -276,7 +283,8 @@ def test_cache_invalidation_on_task_label_and_project_mutations(
         ).status_code
         == 204
     )
-    assert not any(k.startswith("tasks:project:1:") for k in fake_redis.store)
+    assert any(k.startswith("tasks:project:1:") for k in fake_redis.store)
+    assert len(fake_redis.delete_calls) == deletes_before_labels
 
     # 4. Delete task invalidates project 1
     warm_all()
@@ -286,8 +294,9 @@ def test_cache_invalidation_on_task_label_and_project_mutations(
     )
     assert not any(k.startswith("tasks:project:1:") for k in fake_redis.store)
 
-    # 5. Archive project 1 invalidates project 1
+    # 5. Update/archive project 1 does NOT needlessly invalidate task cache
     warm_all()
+    deletes_before_archive = len(fake_redis.delete_calls)
     assert (
         client.patch(
             "/api/v1/projects/1",
@@ -296,7 +305,8 @@ def test_cache_invalidation_on_task_label_and_project_mutations(
         ).status_code
         == 200
     )
-    assert not any(k.startswith("tasks:project:1:") for k in fake_redis.store)
+    assert any(k.startswith("tasks:project:1:") for k in fake_redis.store)
+    assert len(fake_redis.delete_calls) == deletes_before_archive
 
     # 6. Delete project 2 invalidates project 2 without touching project 10
     warm_all()
@@ -305,6 +315,44 @@ def test_cache_invalidation_on_task_label_and_project_mutations(
     )
     assert not any(k.startswith("tasks:project:2:") for k in fake_redis.store)
     assert any(k.startswith("tasks:project:10:") for k in fake_redis.store)
+
+
+def test_cache_invalidation_runs_after_db_commit(
+    client: TestClient,
+    fake_redis: FakeAsyncRedis,
+    database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_counts: list[int] = []
+    original_invalidate = TaskCacheService.invalidate_project_tasks
+
+    async def spy_invalidate(self: TaskCacheService, project_id: int) -> None:
+        engine = create_database_engine(database_url)
+        try:
+            factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with factory() as verify_session:
+                count = await verify_session.scalar(
+                    select(func.count(Task.id)).where(Task.project_id == project_id)
+                )
+                observed_counts.append(int(count or 0))
+        finally:
+            await engine.dispose()
+        await original_invalidate(self, project_id)
+
+    monkeypatch.setattr(TaskCacheService, "invalidate_project_tasks", spy_invalidate)
+
+    create_res = client.post(
+        "/api/v1/projects/1/tasks",
+        headers=auth_headers(1),
+        json={"title": "Committed Task"},
+    )
+    assert create_res.status_code == 201
+    task_id = create_res.json()["id"]
+    assert observed_counts == [1]
+
+    del_res = client.delete(f"/api/v1/tasks/{task_id}", headers=auth_headers(1))
+    assert del_res.status_code == 204
+    assert observed_counts == [1, 0]
 
 
 def test_redis_unavailable_graceful_fallback(database_url: str) -> None:

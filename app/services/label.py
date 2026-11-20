@@ -20,7 +20,6 @@ from app.repositories.project import ProjectRepository
 from app.repositories.task import TaskRepository
 from app.repositories.workspace import WorkspaceRepository
 from app.schemas.label import LabelCreate, LabelUpdate, TaskLabelRead
-from app.services.cache import TaskCacheService
 from app.services.permissions import load_project_for_user, load_task_for_user
 
 
@@ -31,13 +30,11 @@ class LabelService:
         project_repository: ProjectRepository,
         task_repository: TaskRepository,
         workspace_repository: WorkspaceRepository,
-        cache_service: TaskCacheService | None = None,
     ) -> None:
         self.repository = repository
         self.project_repository = project_repository
         self.task_repository = task_repository
         self.workspace_repository = workspace_repository
-        self.cache_service = cache_service or TaskCacheService()
 
     async def _require_label(self, label_id: int) -> Label:
         label = await self.repository.get(label_id)
@@ -100,7 +97,6 @@ class LabelService:
                 updated = await self.repository.update(label, values)
         except IntegrityError as exc:
             raise ConflictException(LABEL_ALREADY_EXISTS) from exc
-        await self.cache_service.invalidate_project_tasks(label.project_id)
         return updated
 
     async def delete(self, label_id: int, user: User) -> None:
@@ -113,9 +109,7 @@ class LabelService:
             write=True,
             forbidden_message=LABEL_FORBIDDEN,
         )
-        project_id = label.project_id
         await self.repository.delete(label)
-        await self.cache_service.invalidate_project_tasks(project_id)
 
     async def list_for_task(self, task_id: int, user: User) -> list[Label]:
         await load_task_for_user(
@@ -158,7 +152,6 @@ class LabelService:
                 await self.repository.attach_to_task(task_id, label_id)
         except IntegrityError as exc:
             raise ConflictException(LABEL_ALREADY_ATTACHED) from exc
-        await self.cache_service.invalidate_project_tasks(task.project_id)
         return TaskLabelRead(
             task_id=task.id,
             label_id=label.id,
@@ -167,7 +160,7 @@ class LabelService:
         )
 
     async def detach_from_task(self, task_id: int, label_id: int, user: User) -> None:
-        task, _, _ = await load_task_for_user(
+        await load_task_for_user(
             self.task_repository,
             self.project_repository,
             self.workspace_repository,
@@ -178,4 +171,3 @@ class LabelService:
         if not await self.repository.is_attached_to_task(task_id, label_id):
             raise NotFoundException(TASK_LABEL_NOT_FOUND)
         await self.repository.detach_from_task(task_id, label_id)
-        await self.cache_service.invalidate_project_tasks(task.project_id)
