@@ -6,7 +6,9 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.constants import (
+    FIELD_CANNOT_BE_NULL,
     PROJECT_DESCRIPTION_MAX_LENGTH,
+    PROJECT_NAME_CANNOT_BE_BLANK,
     PROJECT_NAME_MAX_LENGTH,
     PROJECT_NAME_MIN_LENGTH,
 )
@@ -33,7 +35,7 @@ class ProjectCreate(BaseModel):
     def validate_name(cls, value: str) -> str:
         trimmed = value.strip()
         if not trimmed:
-            raise ValueError("Project name cannot be blank")
+            raise ValueError(PROJECT_NAME_CANNOT_BE_BLANK)
         return trimmed
 
     @field_validator("description")
@@ -64,13 +66,20 @@ class ProjectUpdate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def validate_name(cls, value: str | None) -> str | None:
+    def validate_name(cls, value: str | None) -> str:
         if value is None:
-            return None
+            raise ValueError(FIELD_CANNOT_BE_NULL)
         trimmed = value.strip()
         if not trimmed:
-            raise ValueError("Project name cannot be blank")
+            raise ValueError(PROJECT_NAME_CANNOT_BE_BLANK)
         return trimmed
+
+    @field_validator("status")
+    @classmethod
+    def reject_null_status(cls, value: ProjectStatus | None) -> ProjectStatus:
+        if value is None:
+            raise ValueError(FIELD_CANNOT_BE_NULL)
+        return value
 
     @field_validator("description")
     @classmethod

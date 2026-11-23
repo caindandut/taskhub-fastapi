@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import (
     BaseModel,
@@ -13,11 +13,14 @@ from pydantic import (
 
 from app.core.constants import (
     DEFAULT_PAGE_SIZE,
+    FIELD_CANNOT_BE_NULL,
     MAX_PAGE_SIZE,
     WORKSPACE_NAME_MAX_LENGTH,
     WORKSPACE_NAME_MIN_LENGTH,
 )
 from app.models.enums import WorkspaceRole
+
+MemberAssignableRole = Literal[WorkspaceRole.EDITOR, WorkspaceRole.VIEWER]
 
 WorkspaceName = Annotated[
     str,
@@ -44,7 +47,7 @@ class WorkspaceUpdate(BaseModel):
     @classmethod
     def reject_explicit_null(cls, value: str | None) -> str:
         if value is None:
-            raise ValueError("This field cannot be null")
+            raise ValueError(FIELD_CANNOT_BE_NULL)
         return value
 
 
@@ -76,13 +79,13 @@ class WorkspaceMemberCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_id: PositiveInt
-    role: WorkspaceRole = WorkspaceRole.VIEWER
+    role: MemberAssignableRole = WorkspaceRole.VIEWER
 
 
 class WorkspaceMemberUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    role: WorkspaceRole
+    role: MemberAssignableRole
 
 
 class WorkspaceMemberRead(BaseModel):
