@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models import Project, Task, User, Workspace
 from app.repositories.base import BaseRepository
@@ -24,7 +25,7 @@ class TaskRepository(BaseRepository[Task]):
         user_id: int,
         is_admin: bool = False,
     ) -> tuple[list[Task], int]:
-        filters = []
+        filters: list[ColumnElement[bool]] = []
         if not is_admin:
             accessible_projects = (
                 select(Project.id)

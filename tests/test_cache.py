@@ -441,7 +441,7 @@ def test_redis_settings_validation_and_lifespan(
                 redis_url=bad_url,
             )
 
-    # App lifespan initializes and closes redis client cleanly even if server unreachable
+    # App lifespan initializes/closes redis client even if server is unreachable
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6399/0")
     get_settings.cache_clear()
     try:

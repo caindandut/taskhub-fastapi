@@ -9,8 +9,7 @@ from app.core.constants import (
     LABEL_NAME_MAX_LENGTH,
     LABEL_NAME_MIN_LENGTH,
 )
-from app.core.messages import FIELD_CANNOT_BE_NULL
-from app.schemas.base import BaseSchema
+from app.schemas.base import BaseSchema, require_not_null
 
 LabelName = Annotated[
     str, Field(min_length=LABEL_NAME_MIN_LENGTH, max_length=LABEL_NAME_MAX_LENGTH)
@@ -37,9 +36,7 @@ class LabelUpdate(BaseSchema):
     @field_validator("name", "color")
     @classmethod
     def reject_explicit_null(cls, value: str | None) -> str:
-        if value is None:
-            raise ValueError(FIELD_CANNOT_BE_NULL)
-        return value
+        return require_not_null(value)
 
 
 class LabelRead(BaseSchema):

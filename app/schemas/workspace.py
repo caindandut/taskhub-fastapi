@@ -1,24 +1,25 @@
-from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import (
-    BaseModel,
     ConfigDict,
     EmailStr,
-    Field,
     PositiveInt,
     StringConstraints,
     field_validator,
 )
 
 from app.core.constants import (
-    DEFAULT_PAGE_SIZE,
-    FIELD_CANNOT_BE_NULL,
-    MAX_PAGE_SIZE,
     WORKSPACE_NAME_MAX_LENGTH,
     WORKSPACE_NAME_MIN_LENGTH,
 )
 from app.models.enums import WorkspaceRole
+from app.schemas.base import (
+    BaseSchema,
+    PaginatedPage,
+    PaginationQuery,
+    UtcDatetime,
+    require_not_null,
+)
 
 MemberAssignableRole = Literal[WorkspaceRole.EDITOR, WorkspaceRole.VIEWER]
 
@@ -32,63 +33,46 @@ WorkspaceName = Annotated[
 ]
 
 
-class WorkspaceCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class WorkspaceCreate(BaseSchema):
     name: WorkspaceName
 
 
-class WorkspaceUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class WorkspaceUpdate(BaseSchema):
     name: WorkspaceName | None = None
 
     @field_validator("name")
     @classmethod
     def reject_explicit_null(cls, value: str | None) -> str:
-        if value is None:
-            raise ValueError(FIELD_CANNOT_BE_NULL)
-        return value
+        return require_not_null(value)
 
 
-class WorkspaceRead(BaseModel):
+class WorkspaceRead(BaseSchema):
     model_config = ConfigDict(from_attributes=True)
 
     id: PositiveInt
     name: str
     owner_id: PositiveInt
-    created_at: datetime
+    created_at: UtcDatetime
 
 
-class WorkspaceQuery(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
+class WorkspaceQuery(PaginationQuery):
     q: str | None = None
-    page: int = Field(default=1, ge=1)
-    limit: int = Field(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
 
 
-class WorkspacePage(BaseModel):
+class WorkspacePage(PaginatedPage):
     items: list[WorkspaceRead]
-    total: int = Field(ge=0)
-    page: PositiveInt
-    limit: PositiveInt
 
 
-class WorkspaceMemberCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class WorkspaceMemberCreate(BaseSchema):
     user_id: PositiveInt
     role: MemberAssignableRole = WorkspaceRole.VIEWER
 
 
-class WorkspaceMemberUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class WorkspaceMemberUpdate(BaseSchema):
     role: MemberAssignableRole
 
 
-class WorkspaceMemberRead(BaseModel):
+class WorkspaceMemberRead(BaseSchema):
     model_config = ConfigDict(from_attributes=True)
 
     workspace_id: PositiveInt

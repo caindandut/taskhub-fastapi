@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Annotated
 
 from pydantic import (
@@ -13,7 +12,6 @@ from pydantic import (
 )
 
 from app.core.constants import (
-    FIELD_CANNOT_BE_NULL,
     PASSWORD_CANNOT_BE_BLANK,
     PASSWORD_MAX_LENGTH,
     PASSWORD_MIN_LENGTH,
@@ -22,7 +20,7 @@ from app.core.constants import (
     USER_NAME_MIN_LENGTH,
 )
 from app.models.enums import UserRole
-from app.schemas.base import BaseSchema
+from app.schemas.base import BaseSchema, UtcDatetime, require_not_null
 
 
 def _normalize_email(value: object) -> object:
@@ -73,7 +71,7 @@ class UserRead(BaseModel):
     full_name: UserFullName
     role: UserRole
     is_active: bool
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class UserUpdate(BaseSchema):
@@ -82,6 +80,4 @@ class UserUpdate(BaseSchema):
     @field_validator("full_name")
     @classmethod
     def reject_explicit_null(cls, value: str | None) -> str:
-        if value is None:
-            raise ValueError(FIELD_CANNOT_BE_NULL)
-        return value
+        return require_not_null(value)

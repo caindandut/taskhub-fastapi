@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+
 from app.core.constants import (
     CANNOT_MODIFY_WORKSPACE_OWNER,
     CANNOT_REMOVE_WORKSPACE_OWNER,
@@ -12,7 +14,6 @@ from app.core.constants import (
 from app.core.exceptions import (
     BadRequestException,
     ConflictException,
-    ForbiddenException,
     NotFoundException,
 )
 from app.models import User, Workspace, WorkspaceMember
@@ -28,21 +29,29 @@ from app.schemas.workspace import (
     WorkspaceRead,
     WorkspaceUpdate,
 )
+from app.services.permissions import require_workspace_access
 
 
 class WorkspaceService:
     def __init__(self, repository: WorkspaceRepository) -> None:
         self.repository = repository
 
+    async def _require_workspace(self, workspace_id: int) -> Workspace:
+        workspace = await self.repository.get(workspace_id)
+        if workspace is None:
+            raise NotFoundException(WORKSPACE_NOT_FOUND)
+        return workspace
+
     async def _check_workspace_access(
         self, workspace: Workspace, user: User, require_owner: bool = False
     ) -> None:
-        if user.role == UserRole.ADMIN:
-            return
-
-        role = await self.repository.get_effective_role(workspace.id, user.id)
-        if role is None or (require_owner and role != WorkspaceRole.OWNER):
-            raise ForbiddenException(WORKSPACE_FORBIDDEN)
+        await require_workspace_access(
+            self.repository,
+            workspace.id,
+            user,
+            min_role=WorkspaceRole.OWNER if require_owner else WorkspaceRole.VIEWER,
+            forbidden_message=WORKSPACE_FORBIDDEN,
+        )
 
     def _to_member_read(self, member: WorkspaceMember) -> WorkspaceMemberRead:
         return WorkspaceMemberRead(
@@ -77,18 +86,14 @@ class WorkspaceService:
         )
 
     async def get(self, workspace_id: int, user: User) -> Workspace:
-        workspace = await self.repository.get(workspace_id)
-        if workspace is None:
-            raise NotFoundException(WORKSPACE_NOT_FOUND)
+        workspace = await self._require_workspace(workspace_id)
         await self._check_workspace_access(workspace, user, require_owner=False)
         return workspace
 
     async def update(
         self, workspace_id: int, payload: WorkspaceUpdate, user: User
     ) -> Workspace:
-        workspace = await self.repository.get(workspace_id)
-        if workspace is None:
-            raise NotFoundException(WORKSPACE_NOT_FOUND)
+        workspace = await self._require_workspace(workspace_id)
         await self._check_workspace_access(workspace, user, require_owner=True)
 
         values = payload.model_dump(exclude_unset=True)
@@ -97,18 +102,14 @@ class WorkspaceService:
         return await self.repository.update(workspace, values)
 
     async def delete(self, workspace_id: int, user: User) -> None:
-        workspace = await self.repository.get(workspace_id)
-        if workspace is None:
-            raise NotFoundException(WORKSPACE_NOT_FOUND)
+        workspace = await self._require_workspace(workspace_id)
         await self._check_workspace_access(workspace, user, require_owner=True)
         await self.repository.delete(workspace)
 
     async def list_members(
         self, workspace_id: int, user: User
-    ) -> list[WorkspaceMemberRead]:
-        workspace = await self.repository.get(workspace_id)
-        if workspace is None:
-            raise NotFoundException(WORKSPACE_NOT_FOUND)
+    ) -> builtins.list[WorkspaceMemberRead]:
+        workspace = await self._require_workspace(workspace_id)
         await self._check_workspace_access(workspace, user, require_owner=False)
 
         members = await self.repository.list_members(workspace_id)
@@ -117,9 +118,7 @@ class WorkspaceService:
     async def add_member(
         self, workspace_id: int, payload: WorkspaceMemberCreate, user: User
     ) -> WorkspaceMemberRead:
-        workspace = await self.repository.get(workspace_id)
-        if workspace is None:
-            raise NotFoundException(WORKSPACE_NOT_FOUND)
+        workspace = await self._require_workspace(workspace_id)
         await self._check_workspace_access(workspace, user, require_owner=True)
 
         if not await self.repository.user_exists(payload.user_id):
@@ -140,9 +139,7 @@ class WorkspaceService:
         payload: WorkspaceMemberUpdate,
         user: User,
     ) -> WorkspaceMemberRead:
-        workspace = await self.repository.get(workspace_id)
-        if workspace is None:
-            raise NotFoundException(WORKSPACE_NOT_FOUND)
+        workspace = await self._require_workspace(workspace_id)
         await self._check_workspace_access(workspace, user, require_owner=True)
 
         member = await self.repository.get_member(workspace_id, target_user_id)
@@ -158,9 +155,7 @@ class WorkspaceService:
     async def remove_member(
         self, workspace_id: int, target_user_id: int, user: User
     ) -> None:
-        workspace = await self.repository.get(workspace_id)
-        if workspace is None:
-            raise NotFoundException(WORKSPACE_NOT_FOUND)
+        workspace = await self._require_workspace(workspace_id)
 
         member = await self.repository.get_member(workspace_id, target_user_id)
         if member is None:

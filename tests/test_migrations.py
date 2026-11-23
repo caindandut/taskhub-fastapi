@@ -56,7 +56,8 @@ def test_migration_upgrade_check_and_downgrade(tmp_path: Path) -> None:
         )
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(
-                "INSERT INTO users (email, full_name, hashed_password) VALUES (?, ?, ?)",
+                "INSERT INTO users (email, full_name, hashed_password) "
+                "VALUES (?, ?, ?)",
                 ("owner@example.com", "Duplicate", "already-hashed-password"),
             )
 
@@ -64,7 +65,8 @@ def test_migration_upgrade_check_and_downgrade(tmp_path: Path) -> None:
     with sqlite3.connect(database) as connection:
         assert (
             connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table' AND name != 'alembic_version'"
+                "SELECT name FROM sqlite_master "
+                "WHERE type = 'table' AND name != 'alembic_version'"
             ).fetchall()
             == []
         )

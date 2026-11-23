@@ -8,9 +8,14 @@ from app.core.constants import (
     TASK_TITLE_MAX_LENGTH,
     TASK_TITLE_MIN_LENGTH,
 )
-from app.core.messages import FIELD_CANNOT_BE_NULL
 from app.models.enums import TaskPriority, TaskStatus
-from app.schemas.base import BaseSchema, PaginatedPage, PaginationQuery, UtcDatetime
+from app.schemas.base import (
+    BaseSchema,
+    PaginatedPage,
+    PaginationQuery,
+    UtcDatetime,
+    require_not_null,
+)
 
 TaskTitle = Annotated[
     str, Field(min_length=TASK_TITLE_MIN_LENGTH, max_length=TASK_TITLE_MAX_LENGTH)
@@ -64,9 +69,7 @@ class TaskUpdate(BaseSchema):
     @field_validator("title", "status", "priority")
     @classmethod
     def reject_explicit_null(cls, value: str | None) -> str:
-        if value is None:
-            raise ValueError(FIELD_CANNOT_BE_NULL)
-        return value
+        return require_not_null(value)
 
 
 class TaskRead(TaskFields):

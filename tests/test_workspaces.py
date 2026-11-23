@@ -97,7 +97,7 @@ def test_list_and_search_workspaces(client: TestClient) -> None:
         json={"name": "User 2 Workspace"},
     )
 
-    # User 1 lists workspaces (sees seeded TaskHub + Alpha + Beta, but not User 2's workspace)
+    # User 1 lists workspaces (seeded TaskHub + Alpha + Beta, not User 2's)
     res = client.get("/api/v1/workspaces", headers=auth_headers(1))
     assert res.status_code == 200
     page = res.json()

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
+from typing import Any, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.refresh_token import RefreshToken
@@ -38,6 +39,6 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
             )
             .values(revoked_at=revoked_at)
         )
-        result = await self.session.execute(statement)
+        result = cast(CursorResult[Any], await self.session.execute(statement))
         await self.session.flush()
         return (result.rowcount or 0) > 0
