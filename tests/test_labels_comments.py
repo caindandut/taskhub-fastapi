@@ -46,7 +46,7 @@ def client(database_url: str) -> Iterator[TestClient]:
 
 @pytest.fixture
 def setup_data(database_url: str) -> dict[str, int]:
-    """Seed admin (3), editor1 (4), editor2 (5), viewer (6), a second project in WS1, a second workspace/project, and tasks."""
+    """Seed admin (3), editor1 (4), editor2 (5), viewer (6), and projects/tasks."""
 
     async def _setup() -> dict[str, int]:
         engine = create_database_engine(database_url)
@@ -669,7 +669,7 @@ def test_cross_workspace_label_attach_returns_404_without_leaking(
         json={"name": "Secret Label"},
     ).json()
 
-    # User 1 tries to attach external label to task1 (project 1, workspace 1) -> 404 (not 400!)
+    # User 1 tries to attach external label to task1 -> 404 (not 400!)
     res = client.post(
         f"/api/v1/tasks/{task1_id}/labels/{ext_label['id']}",
         headers=auth_headers(1),

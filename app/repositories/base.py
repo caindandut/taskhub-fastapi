@@ -1,5 +1,6 @@
-from collections.abc import Mapping
-from typing import Generic, TypeVar
+import builtins
+from collections.abc import Mapping, Sequence
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,11 +31,13 @@ class BaseRepository(Generic[ModelT]):
         *filters: ColumnElement[bool],
         page: int = 1,
         limit: int = DEFAULT_PAGE_SIZE,
+        order_by: Sequence[Any] | None = None,
     ) -> list[ModelT]:
+        order_clauses = order_by or self.model.__mapper__.primary_key
         statement = (
             select(self.model)
             .where(*filters)
-            .order_by(*self.model.__mapper__.primary_key)
+            .order_by(*order_clauses)
             .offset((page - 1) * limit)
             .limit(limit)
         )
@@ -43,6 +46,19 @@ class BaseRepository(Generic[ModelT]):
     async def count(self, *filters: ColumnElement[bool]) -> int:
         statement = select(func.count()).select_from(self.model).where(*filters)
         return (await self.session.execute(statement)).scalar_one()
+
+    async def paginate(
+        self,
+        *filters: ColumnElement[bool],
+        page: int = 1,
+        limit: int = DEFAULT_PAGE_SIZE,
+        order_by: Sequence[Any] | None = None,
+    ) -> tuple[builtins.list[ModelT], int]:
+        """Return paginated rows while skipping COUNT(*) on partial pages."""
+        items = await self.list(*filters, page=page, limit=limit, order_by=order_by)
+        if len(items) < limit and (page == 1 or len(items) > 0):
+            return items, (page - 1) * limit + len(items)
+        return items, await self.count(*filters)
 
     async def update(self, instance: ModelT, values: Mapping[str, object]) -> ModelT:
         for field, value in values.items():

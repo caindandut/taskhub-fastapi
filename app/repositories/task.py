@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models import Project, Task, User, Workspace
 from app.repositories.base import BaseRepository
@@ -15,7 +16,8 @@ class TaskRepository(BaseRepository[Task]):
         return await self.session.get(User, user_id)
 
     async def user_exists(self, user_id: int) -> bool:
-        return await self.get_user(user_id) is not None
+        statement = select(select(User.id).where(User.id == user_id).exists())
+        return bool(await self.session.scalar(statement))
 
     async def search(
         self,
@@ -24,7 +26,7 @@ class TaskRepository(BaseRepository[Task]):
         user_id: int,
         is_admin: bool = False,
     ) -> tuple[list[Task], int]:
-        filters = []
+        filters: list[ColumnElement[bool]] = []
         if not is_admin:
             accessible_projects = (
                 select(Project.id)
@@ -42,7 +44,4 @@ class TaskRepository(BaseRepository[Task]):
             filters.append(Task.priority == query.priority)
         if query.assignee_id is not None:
             filters.append(Task.assignee_id == query.assignee_id)
-        return (
-            await self.list(*filters, page=query.page, limit=query.limit),
-            await self.count(*filters),
-        )
+        return await self.paginate(*filters, page=query.page, limit=query.limit)

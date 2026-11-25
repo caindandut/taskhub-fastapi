@@ -7,22 +7,28 @@ from app.core.constants import INTERNAL_SERVER_ERROR
 from app.schemas.error import ErrorResponse, ValidationErrorResponse
 
 OPENAPI_DESCRIPTION = """
-TaskHub is an asynchronous Task Management REST API built with FastAPI, SQLAlchemy 2.x, MySQL 8, and Redis.
+TaskHub is an asynchronous Task Management REST API built with FastAPI,
+SQLAlchemy 2.x, MySQL 8, and Redis.
 
 ### Authentication
-Protected endpoints require an HTTP `Authorization: Bearer <access_token>` header obtained from `/api/v1/auth/login`.
+Protected endpoints require an HTTP `Authorization: Bearer <access_token>` header
+obtained from `/api/v1/auth/login`.
 
 ### Request Tracing & Error Format
 - All responses include `X-Request-ID` and `X-Process-Time` headers.
-- Error responses (`400`, `401`, `403`, `404`, `409`, `500`) return `{"detail": "<message>"}`.
-- Validation errors (`422`) return sanitized `{"detail": [{"loc": ..., "msg": ..., "type": ...}]}`.
+- Error responses (`400`, `401`, `403`, `404`, `409`, `500`) return
+  `{"detail": "<message>"}`.
+- Validation errors (`422`) return sanitized
+  `{"detail": [{"loc": ..., "msg": ..., "type": ...}]}`.
 """.strip()
 
 OPENAPI_TAGS: list[dict[str, Any]] = [
     {"name": "Health", "description": "Service liveness and readiness checks."},
     {
         "name": "Auth",
-        "description": "User registration, JWT login, token refresh rotation, and logout.",
+        "description": (
+            "User registration, JWT login, token refresh rotation, and logout."
+        ),
     },
     {"name": "Users", "description": "Current user profile and password management."},
     {
@@ -35,7 +41,9 @@ OPENAPI_TAGS: list[dict[str, Any]] = [
     },
     {
         "name": "Tasks",
-        "description": "Task CRUD, assignment notifications, filtering, pagination, and Redis caching.",
+        "description": (
+            "Task CRUD, assignment notifications, filtering, pagination, and caching."
+        ),
     },
     {"name": "Labels", "description": "Project label CRUD and task label assignment."},
     {"name": "Comments", "description": "Task comments with author/owner moderation."},

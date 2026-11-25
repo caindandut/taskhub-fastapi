@@ -40,7 +40,7 @@ def client(database_url: str) -> Iterator[TestClient]:
 
 @pytest.fixture
 def setup_workspace_roles(database_url: str) -> None:
-    """Create platform ADMIN (3), workspace EDITOR (4), workspace VIEWER (5), and a second workspace."""
+    """Create admin (3), editor (4), viewer (5), and a second workspace."""
 
     async def _setup() -> None:
         engine = create_database_engine(database_url)
@@ -208,7 +208,7 @@ def test_task_rbac_and_workspace_isolation(
     u2_tasks = client.get("/api/v1/tasks", headers=auth_headers(2)).json()
     assert [t["id"] for t in u2_tasks["items"]] == [other_task["id"]]
 
-    # Filtering /api/v1/tasks by project_id of another workspace without permission returns empty
+    # Filtering /api/v1/tasks by an unauthorized project_id returns empty
     u2_forbidden_filter = client.get(
         "/api/v1/tasks", headers=auth_headers(2), params={"project_id": 1}
     )

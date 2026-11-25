@@ -126,6 +126,24 @@ def test_update_project_validation(client: TestClient) -> None:
     )
     assert res.status_code == 422
 
+    # Explicit null on NOT NULL fields (name, status) must return 422
+    for null_payload in ({"name": None}, {"status": None}):
+        null_res = client.patch(
+            "/api/v1/projects/1",
+            headers=auth_headers(1),
+            json=null_payload,
+        )
+        assert null_res.status_code == 422
+
+    # Nullable description can be cleared with null
+    clear_desc_res = client.patch(
+        "/api/v1/projects/1",
+        headers=auth_headers(1),
+        json={"description": None},
+    )
+    assert clear_desc_res.status_code == 200
+    assert clear_desc_res.json()["description"] is None
+
     # Invalid status
     res = client.patch(
         "/api/v1/projects/1",

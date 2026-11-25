@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import Request
 from sqlalchemy import event
@@ -19,7 +20,7 @@ def create_database_engine(database_url: str) -> AsyncEngine:
     if engine.dialect.name == "sqlite":
 
         @event.listens_for(engine.sync_engine, "connect")
-        def enable_foreign_keys(connection, _connection_record) -> None:
+        def enable_foreign_keys(connection: Any, _connection_record: Any) -> None:
             cursor = connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
