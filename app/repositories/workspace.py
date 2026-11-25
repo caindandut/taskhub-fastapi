@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -23,7 +23,8 @@ class WorkspaceRepository(BaseRepository[Workspace]):
         )
 
     async def user_exists(self, user_id: int) -> bool:
-        return await self.session.get(User, user_id) is not None
+        statement = select(select(User.id).where(User.id == user_id).exists())
+        return bool(await self.session.scalar(statement))
 
     async def search_for_user(
         self,
@@ -34,24 +35,15 @@ class WorkspaceRepository(BaseRepository[Workspace]):
         page: int = 1,
         limit: int = DEFAULT_PAGE_SIZE,
     ) -> tuple[Sequence[Workspace], int]:
-        filters = []
+        filters: list[ColumnElement[bool]] = []
         if not is_admin:
             filters.append(self.accessible_workspace_filter(user_id))
         if q is not None:
             filters.append(Workspace.name.icontains(q, autoescape=True))
 
-        count_stmt = select(func.count(Workspace.id)).where(*filters)
-        total = (await self.session.execute(count_stmt)).scalar_one()
-
-        statement = (
-            select(Workspace)
-            .where(*filters)
-            .order_by(Workspace.id)
-            .offset((page - 1) * limit)
-            .limit(limit)
+        return await self.paginate(
+            *filters, page=page, limit=limit, order_by=(Workspace.id,)
         )
-        workspaces = (await self.session.scalars(statement)).all()
-        return workspaces, total
 
     async def is_member(self, workspace_id: int, user_id: int) -> bool:
         statement = select(
@@ -89,11 +81,22 @@ class WorkspaceRepository(BaseRepository[Workspace]):
     async def get_effective_role(
         self, workspace_id: int, user_id: int
     ) -> WorkspaceRole | None:
-        role = await self.get_member_role(workspace_id, user_id)
-        if role is not None:
-            return role
-        workspace = await self.get(workspace_id)
-        if workspace is not None and workspace.owner_id == user_id:
+        statement = (
+            select(Workspace.owner_id, WorkspaceMember.role)
+            .outerjoin(
+                WorkspaceMember,
+                (WorkspaceMember.workspace_id == Workspace.id)
+                & (WorkspaceMember.user_id == user_id),
+            )
+            .where(Workspace.id == workspace_id)
+        )
+        row = (await self.session.execute(statement)).one_or_none()
+        if row is None:
+            return None
+        owner_id, member_role = row
+        if member_role is not None:
+            return member_role
+        if owner_id == user_id:
             return WorkspaceRole.OWNER
         return None
 

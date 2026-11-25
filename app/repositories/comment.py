@@ -1,4 +1,3 @@
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Comment
@@ -13,13 +12,9 @@ class CommentRepository(BaseRepository[Comment]):
     async def list_by_task(
         self, task_id: int, query: CommentQuery
     ) -> tuple[list[Comment], int]:
-        statement = (
-            select(Comment)
-            .where(Comment.task_id == task_id)
-            .order_by(Comment.created_at, Comment.id)
-            .offset((query.page - 1) * query.limit)
-            .limit(query.limit)
+        return await self.paginate(
+            Comment.task_id == task_id,
+            page=query.page,
+            limit=query.limit,
+            order_by=(Comment.created_at, Comment.id),
         )
-        items = list(await self.session.scalars(statement))
-        total = await self.count(Comment.task_id == task_id)
-        return items, total
